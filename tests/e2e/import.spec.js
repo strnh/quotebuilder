@@ -12,6 +12,17 @@ test.describe('見積書取込', () => {
     await expect(page.getByRole('heading', { name: '見積書取込' })).toBeVisible();
   });
 
+  test('ドロップゾーンはキーボード（role=button・Tab/Enter）で操作できる', async ({ page }) => {
+    await page.goto('/import');
+    const dropzone = page.getByRole('button', { name: /ドラッグ&ドロップ/ });
+    await expect(dropzone).toBeVisible();
+    // フォーカス可能（tabIndex=0）で Enter キーに反応する（ファイルダイアログ起動はヘッドレスでは
+    // 開けないため、フォーカスとキーハンドラがエラーなく通ることを確認）
+    await dropzone.focus();
+    await expect(dropzone).toBeFocused();
+    await dropzone.press('Enter');
+  });
+
   test('xlsx を取り込むと結果に下書き警告が表示され一覧が増える', async ({ page }) => {
     await page.goto('/import');
 

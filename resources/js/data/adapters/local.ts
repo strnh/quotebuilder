@@ -119,7 +119,7 @@ export async function importQuotes(files: File[]): Promise<ImportResponse> {
       warnings: ['ローカルモードのモック取込: シート内容は解析されません（下書きとして保存）'],
     });
   }
-  return { created: results.filter((r) => r.quote_id != null).length, results };
+  return { created: results.filter((r) => 'quote_id' in r).length, results };
 }
 
 type SeedItem = Omit<LineItem, 'total'>;

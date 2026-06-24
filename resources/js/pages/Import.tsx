@@ -79,12 +79,21 @@ export default function Import() {
       {/* ドロップゾーン */}
       <Card className="mb-6 p-6">
         <div
+          role="button"
+          tabIndex={0}
+          aria-label="ファイルを選択、またはドラッグ&ドロップで追加"
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           onClick={() => inputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              inputRef.current?.click();
+            }
+          }}
           className={clsx(
-            'flex cursor-pointer flex-col items-center justify-center rounded-[16px] border-2 border-dashed px-6 py-10 text-center transition-colors',
+            'flex cursor-pointer flex-col items-center justify-center rounded-[16px] border-2 border-dashed px-6 py-10 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
             dragging ? 'border-primary bg-primary-50' : 'border-neutral-200 hover:border-primary/50 hover:bg-neutral-50'
           )}
         >
@@ -140,32 +149,35 @@ export default function Import() {
           ) : (
             <ul className="space-y-3">
               {results.map((r, i) => {
-                const ok = r.quote_id != null;
+                // 失敗結果（error を持つ）
+                if ('error' in r) {
+                  return (
+                    <li key={`${r.filename}:${i}`} className="rounded-[16px] border border-danger/30 bg-danger/5 px-4 py-3">
+                      <div className="flex items-start gap-3">
+                        <XCircle size={18} className="mt-0.5 shrink-0 text-danger" />
+                        <div className="min-w-0 flex-1">
+                          <span className="font-mono text-sm text-neutral-700">{r.filename}</span>
+                          <p className="mt-1 text-sm text-danger">{r.error}</p>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                }
+
+                // 成功結果（quote_id を持つ）
                 return (
-                  <li
-                    key={`${r.filename}:${i}`}
-                    className={clsx(
-                      'rounded-[16px] border px-4 py-3',
-                      ok ? 'border-neutral-200 bg-white' : 'border-danger/30 bg-danger/5'
-                    )}
-                  >
+                  <li key={`${r.filename}:${i}`} className="rounded-[16px] border border-neutral-200 bg-white px-4 py-3">
                     <div className="flex items-start gap-3">
-                      {ok
-                        ? <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-success" />
-                        : <XCircle size={18} className="mt-0.5 shrink-0 text-danger" />}
+                      <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-success" />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-mono text-sm text-neutral-700">{r.filename}</span>
-                          {ok && (
-                            r.customer_matched
-                              ? <Badge className="bg-success/10 text-success">取引先突合</Badge>
-                              : <Badge className="bg-warning/10 text-warning">取引先未突合</Badge>
-                          )}
+                          {r.customer_matched
+                            ? <Badge className="bg-success/10 text-success">取引先突合</Badge>
+                            : <Badge className="bg-warning/10 text-warning">取引先未突合</Badge>}
                         </div>
 
-                        {!ok && <p className="mt-1 text-sm text-danger">{r.error}</p>}
-
-                        {ok && r.warnings && r.warnings.length > 0 && (
+                        {r.warnings.length > 0 && (
                           <ul className="mt-2 space-y-1">
                             {r.warnings.map((w, wi) => (
                               <li key={wi} className="flex items-start gap-1.5 text-xs text-warning">
@@ -177,11 +189,9 @@ export default function Import() {
                         )}
                       </div>
 
-                      {ok && (
-                        <Button variant="secondary" size="sm" onClick={() => navigate(`/quotes/${r.quote_id}`)}>
-                          見積を開く
-                        </Button>
-                      )}
+                      <Button variant="secondary" size="sm" onClick={() => navigate(`/quotes/${r.quote_id}`)}>
+                        見積を開く
+                      </Button>
                     </div>
                   </li>
                 );
