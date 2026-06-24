@@ -9,8 +9,23 @@ use Illuminate\Database\Seeder;
 
 class DemoSeeder extends Seeder
 {
+    /**
+     * デモ/開発/テスト用のダミーデータを投入する。
+     *
+     * ここで作る取引先（取込サンプルと突合する「株式会社カマキ」(CMK) 等）や
+     * サンプル見積はすべてデモ用であり、production には投入しない想定。
+     * production の通常デプロイは `php artisan migrate --force`（--seed なし）で
+     * seeder を走らせないが、誤って `db:seed` された場合に備え、ここでも
+     * production 環境では安全に skip してデモデータが本番に混入しないようにする。
+     */
     public function run(): void
     {
+        if (app()->environment('production')) {
+            $this->command?->warn('DemoSeeder はデモ用のため production では実行しません。');
+
+            return;
+        }
+
         $sender = SenderProfile::create([
             'sender_company' => '株式会社ゼンセールス',
             'sender_zip' => '150-0002',
