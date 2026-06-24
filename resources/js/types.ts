@@ -98,6 +98,22 @@ export interface Quote extends SenderSnapshot, CustomerSnapshot {
   updated_at?: string;
 }
 
+// 取込結果（1 ファイル単位）。成功時は quote_id 等、失敗時は error を持つ。
+export interface ImportResult {
+  filename: string;
+  quote_id?: ID;
+  customer_id?: ID | null;
+  customer_matched?: boolean;
+  warnings?: string[];
+  error?: string;
+}
+
+// 取込レスポンス（POST /api/quotes/import）
+export interface ImportResponse {
+  created: number;
+  results: ImportResult[];
+}
+
 // エンティティ共通の CRUD アダプターインターフェース
 export interface EntityAdapter<T extends { id: ID }> {
   list(sort?: string): Promise<T[]>;

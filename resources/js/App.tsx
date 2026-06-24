@@ -8,6 +8,7 @@ import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import QuoteList from './pages/QuoteList';
 import QuoteForm from './pages/QuoteForm';
+import Import from './pages/Import';
 import QuotePreview from './pages/QuotePreview';
 import Summary from './pages/Summary';
 import SenderProfiles from './pages/SenderProfiles';
@@ -32,6 +33,7 @@ export default function App() {
       {/* アプリ */}
       <Route path="/" element={<RequireAuth><QuoteList /></RequireAuth>} />
       <Route path="/quotes/new" element={<RequireAuth><QuoteForm /></RequireAuth>} />
+      <Route path="/import" element={<RequireAuth><Import /></RequireAuth>} />
       <Route path="/quotes/:id" element={<RequireAuth><QuotePreview /></RequireAuth>} />
       <Route path="/quotes/:id/edit" element={<RequireAuth><QuoteForm /></RequireAuth>} />
       <Route path="/summary" element={<RequireAuth><Summary /></RequireAuth>} />

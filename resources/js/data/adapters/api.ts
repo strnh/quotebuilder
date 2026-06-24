@@ -1,6 +1,6 @@
 // REST API アダプター（Laravel + SQLite バックエンド）。
 // /api/{customers,sender-profiles,quotes} の apiResource を呼ぶ。
-import type { Customer as TCustomer, EntityAdapter, ID, Quote as TQuote, SenderProfile as TSenderProfile } from '../../types';
+import type { Customer as TCustomer, EntityAdapter, ID, ImportResponse, Quote as TQuote, SenderProfile as TSenderProfile } from '../../types';
 
 interface ApiError extends Error {
   status?: number;
@@ -58,6 +58,29 @@ function makeEntity<T extends { id: ID }>(path: string): EntityAdapter<T> {
 export const Quote: EntityAdapter<TQuote> = makeEntity<TQuote>('quotes');
 export const Customer: EntityAdapter<TCustomer> = makeEntity<TCustomer>('customers');
 export const SenderProfile: EntityAdapter<TSenderProfile> = makeEntity<TSenderProfile>('sender-profiles');
+
+// 御見積書ファイル（複数可）を multipart/form-data で取り込む。
+// FormData は request() を通さない: JSON 化や手動 Content-Type 付与は
+// multipart の boundary を壊すため、ブラウザに任せて素の fetch を使う。
+export async function importQuotes(files: File[]): Promise<ImportResponse> {
+  const form = new FormData();
+  for (const file of files) form.append('files[]', file);
+
+  const res = await fetch('/api/quotes/import', {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    body: form,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message = data?.message || `取込に失敗しました (${res.status})`;
+    const err = new Error(message) as ApiError;
+    err.status = res.status;
+    err.errors = data?.errors;
+    throw err;
+  }
+  return data as ImportResponse;
+}
 
 // API モードではサーバー（DemoSeeder）がデータを投入するため no-op
 export function seedIfEmpty(): void {}

@@ -1,6 +1,6 @@
 // localStorage アダプター（オフライン/デモ/テスト用）。
 // API を使わずブラウザ内で完結する。e2e はこのアダプターで分離性を確保する。
-import type { Customer as TCustomer, EntityAdapter, ID, LineItem, Quote as TQuote, SenderProfile as TSenderProfile } from '../../types';
+import type { Customer as TCustomer, EntityAdapter, ID, ImportResponse, ImportResult, LineItem, Quote as TQuote, SenderProfile as TSenderProfile } from '../../types';
 
 const NS = 'quotes';
 
@@ -88,6 +88,39 @@ SenderProfile.update = async (id, data) => {
   singleDefault(r);
   return r;
 };
+
+// 取込のモック。シート解析はサーバー専用機能のため、local では実ファイルを
+// 解析せず、ファイル名から下書き Quote を 1 件生成して API と同形状の結果を返す。
+// （API モードでの取込結果プレビューと同じ UI を e2e/デモで検証できるようにする）
+const SHEET_EXTS = ['xlsx', 'ods'];
+
+export async function importQuotes(files: File[]): Promise<ImportResponse> {
+  const results: ImportResult[] = [];
+  for (const file of files) {
+    const name = file.name;
+    const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : '';
+    if (!SHEET_EXTS.includes(ext)) {
+      results.push({ filename: name, error: `${ext || '不明な拡張子'} は未対応です（xlsx / ods のみ取込可能）` });
+      continue;
+    }
+    const quote = await Quote.create({
+      quote_number: name.slice(0, name.lastIndexOf('.')),
+      subject: '',
+      status: 'draft',
+      tax_rate: 10,
+      items: [],
+      customer_id: '',
+    } as Partial<TQuote>);
+    results.push({
+      filename: name,
+      quote_id: quote.id,
+      customer_id: null,
+      customer_matched: false,
+      warnings: ['ローカルモードのモック取込: シート内容は解析されません（下書きとして保存）'],
+    });
+  }
+  return { created: results.filter((r) => r.quote_id != null).length, results };
+}
 
 type SeedItem = Omit<LineItem, 'total'>;
 
