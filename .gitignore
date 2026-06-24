@@ -15,6 +15,7 @@
 /.zed
 /auth.json
 /node_modules
+/prompt
 /test-results
 /playwright-report
 /tests/e2e/.report
