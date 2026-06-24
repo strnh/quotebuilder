@@ -16,16 +16,34 @@ class ImportController extends Controller
 {
     /** 取込対応の表計算拡張子（pdf はレイアウト依存のため現状未対応）。 */
     private const SHEET_EXTS = ['xlsx', 'ods'];
+    /** 1 リクエストで受け付ける最大ファイル数（バッチ誤用・過負荷ガード）。 */
+    private const MAX_FILES = 20;
+
+    /**
+     * 内容ベースの MIME 許可リスト（拡張子偽装対策）。xlsx/ods は zip コンテナのため、
+     * 環境により finfo が application/zip と判定するケースも許容する。
+     * 値は実ファイルの getMimeType() 実測に合わせている。
+     */
+    private const ALLOWED_MIMES = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
+        'application/vnd.oasis.opendocument.spreadsheet',                    // ods
+        'application/zip',
+    ];
 
     /**
      * 御見積書ファイル（複数可）を取り込み、ファイル名で取引先を突合して Quote を生成する。
      * 1 ファイル単位で結果を返し、1 件の失敗で全体を止めない。
+     *
+     * バリデーション方針: バッチ形状の問題（ファイル無し・多すぎ）はリクエストレベルで 422、
+     * ファイル単位の内容問題（形式不正・重複番号）は per-file の結果配列で非破壊に返す。
      */
     public function store(Request $request)
     {
         $request->validate([
-            'files' => ['required', 'array', 'min:1'],
+            'files' => ['required', 'array', 'min:1', 'max:'.self::MAX_FILES],
             'files.*' => ['file', 'max:10240'],
+        ], [
+            'files.max' => '一度に取り込めるファイルは最大 '.self::MAX_FILES.' 件です。',
         ]);
 
         $sender = SenderProfile::where('is_default', true)->first()
@@ -60,6 +78,20 @@ class ImportController extends Controller
             return ['filename' => $name, 'error' => "{$parsed['ext']} は未対応です（xlsx / ods のみ取込可能）"];
         }
 
+        // 拡張子偽装対策: 内容ベースの MIME を許可リストと突合（パース前に弾いて明確なエラーに）
+        $mime = $file->getMimeType();
+        if (! in_array($mime, self::ALLOWED_MIMES, true)) {
+            return ['filename' => $name, 'error' => "ファイル形式が不正です（検出された種別: {$mime}）"];
+        }
+
+        // 重複ガード: quote_number はファイル名（拡張子抜き）由来。既存と重複する取込は
+        // 行を二重生成せずスキップしてエラー報告する（重複行の生成こそが破壊的なため）。
+        // Quote::create が即 insert するため、同一バッチ内の重複もこの DB チェックで拾える。
+        $quoteNumber = pathinfo($name, PATHINFO_FILENAME);
+        if (Quote::where('quote_number', $quoteNumber)->exists()) {
+            return ['filename' => $name, 'error' => "見積番号 {$quoteNumber} は既に存在します（重複のためスキップ）"];
+        }
+
         try {
             $sheet = QuoteSheetParser::parse($file->getRealPath());
         } catch (Throwable $e) {
@@ -80,7 +112,7 @@ class ImportController extends Controller
         $data = QuotePricing::apply(array_merge($senderSnap, $customerSnap, [
             'sender_profile_id' => $senderId,
             'customer_id' => $customer?->id,
-            'quote_number' => pathinfo($name, PATHINFO_FILENAME),
+            'quote_number' => $quoteNumber,
             'subject' => $sheet['subject'],
             'status' => 'draft',
             'created_date' => $parsed['date'],

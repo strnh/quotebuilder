@@ -119,4 +119,63 @@ class QuoteImportTest extends TestCase
             ->assertStatus(422)
             ->assertJsonValidationErrors('files');
     }
+
+    public function test_rejects_more_than_max_files(): void
+    {
+        SenderProfile::create(['sender_company' => '自社', 'is_default' => true]);
+
+        // バッチ形状の問題（多すぎ）はリクエストレベルで 422
+        $files = [];
+        for ($i = 1; $i <= 21; $i++) {
+            $files[] = UploadedFile::fake()->create('H-CMK202606'.sprintf('%04d', $i).'.xlsx', 1);
+        }
+
+        $this->postJson('/api/quotes/import', ['files' => $files])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('files');
+
+        $this->assertSame(0, Quote::count());
+    }
+
+    public function test_rejects_file_with_disallowed_mime(): void
+    {
+        SenderProfile::create(['sender_company' => '自社', 'is_default' => true]);
+
+        // 拡張子は合うが中身が表計算でない（偽装）→ per-file エラーで非破壊にスキップ
+        $tmp = tempnam(sys_get_temp_dir(), 'imp');
+        file_put_contents($tmp, 'plain text, not a spreadsheet');
+        $file = new UploadedFile($tmp, 'H-CMK2026062401.xlsx', null, null, true);
+
+        $res = $this->postJson('/api/quotes/import', ['files' => [$file]]);
+
+        $res->assertCreated()->assertJsonPath('created', 0);
+        $this->assertStringContainsString('ファイル形式が不正', $res->json('results.0.error'));
+        $this->assertSame(0, Quote::count());
+    }
+
+    public function test_skips_duplicate_quote_number_within_batch(): void
+    {
+        SenderProfile::create(['sender_company' => '自社', 'is_default' => true]);
+
+        // 同一ファイル名（= 同一 quote_number）を 2 件 → 1 件目のみ生成、2 件目は重複スキップ
+        $res = $this->postJson('/api/quotes/import', ['files' => [$this->upload(), $this->upload()]]);
+
+        $res->assertCreated()->assertJsonPath('created', 1);
+        $this->assertArrayHasKey('quote_id', $res->json('results.0'));
+        $this->assertStringContainsString('既に存在', $res->json('results.1.error'));
+        $this->assertSame(1, Quote::where('quote_number', 'H-CMK2026062401')->count());
+    }
+
+    public function test_skips_duplicate_quote_number_against_existing(): void
+    {
+        SenderProfile::create(['sender_company' => '自社', 'is_default' => true]);
+        Quote::create(['quote_number' => 'H-CMK2026062401']);
+
+        $res = $this->postJson('/api/quotes/import', ['files' => [$this->upload()]]);
+
+        $res->assertCreated()->assertJsonPath('created', 0);
+        $this->assertStringContainsString('既に存在', $res->json('results.0.error'));
+        // 既存 1 件のまま（重複行を生成しない）
+        $this->assertSame(1, Quote::where('quote_number', 'H-CMK2026062401')->count());
+    }
 }
