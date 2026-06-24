@@ -1,0 +1,132 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Customer;
+use App\Models\Quote;
+use App\Models\SenderProfile;
+use App\Support\ImportFilename;
+use App\Support\QuotePricing;
+use App\Support\QuoteSheetParser;
+use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Throwable;
+
+class ImportController extends Controller
+{
+    /** 取込対応の表計算拡張子（pdf はレイアウト依存のため現状未対応）。 */
+    private const SHEET_EXTS = ['xlsx', 'ods'];
+
+    /**
+     * 御見積書ファイル（複数可）を取り込み、ファイル名で取引先を突合して Quote を生成する。
+     * 1 ファイル単位で結果を返し、1 件の失敗で全体を止めない。
+     */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'files' => ['required', 'array', 'min:1'],
+            'files.*' => ['file', 'max:10240'],
+        ]);
+
+        $sender = SenderProfile::where('is_default', true)->first()
+            ?? SenderProfile::orderBy('id')->first();
+        $senderSnap = self::senderSnapshot($sender);
+
+        $results = [];
+        foreach ($request->file('files') as $file) {
+            $results[] = $this->importOne($file, $senderSnap, $sender?->id);
+        }
+
+        return response()->json([
+            'created' => collect($results)->whereNotNull('quote_id')->count(),
+            'results' => $results,
+        ], 201);
+    }
+
+    /**
+     * @param  array<string,mixed>  $senderSnap
+     * @return array<string,mixed>
+     */
+    private function importOne(UploadedFile $file, array $senderSnap, mixed $senderId): array
+    {
+        $name = $file->getClientOriginalName();
+        $parsed = ImportFilename::parse($name);
+
+        if ($parsed === null) {
+            return ['filename' => $name, 'error' => 'ファイル名が規則 H-[識別子][YYYYMMDD][連番].(xlsx|ods|pdf) に一致しません'];
+        }
+
+        if (! in_array($parsed['ext'], self::SHEET_EXTS, true)) {
+            return ['filename' => $name, 'error' => "{$parsed['ext']} は未対応です（xlsx / ods のみ取込可能）"];
+        }
+
+        try {
+            $sheet = QuoteSheetParser::parse($file->getRealPath());
+        } catch (Throwable $e) {
+            return ['filename' => $name, 'error' => 'シート解析に失敗しました: '.$e->getMessage()];
+        }
+
+        $warnings = [];
+        $customer = Customer::where('customer_signature', $parsed['signature'])->first();
+
+        if ($customer === null) {
+            $warnings[] = "取引先未突合: 識別子 {$parsed['signature']} に一致する取引先がありません（下書きとして保存）";
+        }
+
+        $customerSnap = $customer
+            ? self::customerSnapshot($customer)
+            : ['customer_name' => $sheet['customer_hint']];
+
+        $data = QuotePricing::apply(array_merge($senderSnap, $customerSnap, [
+            'sender_profile_id' => $senderId,
+            'customer_id' => $customer?->id,
+            'quote_number' => pathinfo($name, PATHINFO_FILENAME),
+            'subject' => $sheet['subject'],
+            'status' => 'draft',
+            'created_date' => $parsed['date'],
+            'valid_period' => $sheet['valid_period'],
+            'delivery_location' => $sheet['delivery_location'],
+            'tax_rate' => $sheet['tax_rate'],
+            'notes' => $sheet['notes'],
+            'items' => $sheet['items'],
+        ]));
+
+        // シート記載の合計と再計算値の食い違いはレイアウトずれの兆候 → 警告のみ（保存値は再計算優先）
+        if ($sheet['sheet_total'] !== null && $sheet['sheet_total'] !== $data['total_amount']) {
+            $warnings[] = "合計不一致: シート {$sheet['sheet_total']} / 再計算 {$data['total_amount']}";
+        }
+
+        $quote = Quote::create($data);
+
+        return [
+            'filename' => $name,
+            'quote_id' => $quote->id,
+            'customer_id' => $customer?->id,
+            'customer_matched' => $customer !== null,
+            'warnings' => $warnings,
+        ];
+    }
+
+    /** @return array<string,mixed> */
+    private static function senderSnapshot(?SenderProfile $sender): array
+    {
+        if ($sender === null) {
+            return [];
+        }
+
+        return collect($sender->toArray())->only([
+            'sender_company', 'sender_zip', 'sender_pref', 'sender_city',
+            'sender_address1', 'sender_address2', 'sender_person', 'sender_tel',
+            'sender_fax', 'sender_logo_url',
+        ])->all();
+    }
+
+    /** @return array<string,mixed> */
+    private static function customerSnapshot(Customer $customer): array
+    {
+        return collect($customer->toArray())->only([
+            'customer_name', 'customer_department', 'customer_person', 'customer_zip',
+            'customer_pref', 'customer_city', 'customer_address1', 'customer_address2', 'customer_tel',
+        ])->all();
+    }
+}

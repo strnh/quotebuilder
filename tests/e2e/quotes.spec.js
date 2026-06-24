@@ -1,0 +1,97 @@
+import { test, expect } from './fixtures';
+import { login } from './helpers';
+
+test.beforeEach(async ({ page }) => {
+  await login(page);
+});
+
+test.describe('見積書', () => {
+  test('一覧にシードされた見積書が表示される', async ({ page }) => {
+    await expect(page.locator('tbody tr')).toHaveCount(3);
+    await expect(page.getByText('株式会社アルファ商事').first()).toBeVisible();
+  });
+
+  test('ステータスタブで絞り込める', async ({ page }) => {
+    await page.getByRole('button', { name: /^受注/ }).click();
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+  });
+
+  test('検索で絞り込める', async ({ page }) => {
+    await page.getByPlaceholder('顧客名・見積番号で検索...').fill('ベータ');
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    await expect(page.getByText('ベータ工業株式会社')).toBeVisible();
+  });
+
+  test('行クリックでプレビュー（見積書レイアウト）が開く', async ({ page }) => {
+    await page.locator('tbody tr').first().click();
+    await expect(page).toHaveURL(/\/quotes\/[^/]+$/);
+    await expect(page.getByText('御　見　積　書')).toBeVisible();
+    await expect(page.getByText('御中')).toBeVisible();
+    await expect(page.getByText('合計金額：')).toBeVisible();
+  });
+
+  test('新規作成: 取引先・品目を入力して保存できる（合計が自動計算される）', async ({ page }) => {
+    await page.goto('/quotes/new');
+    // 取引先を選択（2番目のSelect = 取引先）
+    const selects = page.locator('select');
+    await selects.nth(1).selectOption({ label: '株式会社アルファ商事' });
+
+    // 1行目の品目入力（品名・数量・納入単価）
+    const row = page.locator('.grid.grid-cols-12').nth(1); // 0=ヘッダ, 1=最初の行
+    await row.locator('input').nth(0).fill('テスト商品');     // 品名
+    await row.locator('input[type=number]').nth(0).fill('3'); // 数量
+    await row.locator('input[type=number]').nth(2).fill('1000'); // 納入単価
+
+    // サマリーに合計 ¥3,300（税10%）が出る
+    await expect(page.getByText('¥3,300')).toBeVisible();
+
+    await page.getByRole('button', { name: '保存' }).click();
+    // 保存後はプレビューへ
+    await expect(page).toHaveURL(/\/quotes\/[^/]+$/);
+    await expect(page.getByText('御　見　積　書')).toBeVisible();
+  });
+
+  test('品目を追加・削除できる', async ({ page }) => {
+    await page.goto('/quotes/new');
+    const rowsBefore = await page.locator('.grid.grid-cols-12').count();
+    await page.getByRole('button', { name: '品目を追加' }).click();
+    const rowsAfter = await page.locator('.grid.grid-cols-12').count();
+    expect(rowsAfter).toBe(rowsBefore + 1);
+  });
+
+  test('既存見積書を編集してステータスを変更できる', async ({ page }) => {
+    // 一覧から先頭（下書き）を開いて編集
+    await page.locator('tbody tr').first().click();
+    await page.getByRole('button', { name: '編集' }).click();
+    await expect(page).toHaveURL(/\/quotes\/[^/]+\/edit$/);
+
+    // フォームに既存値がハイドレートされている（件名が空でない）
+    const subject = page.getByPlaceholder('件名を入力');
+    await expect(subject).not.toHaveValue('');
+
+    // 件名を変更し、ステータスを受注へ
+    await subject.fill('編集後の件名テスト');
+    await page.locator('select').filter({ hasText: '下書き' }).selectOption('accepted');
+    await page.getByRole('button', { name: '保存' }).click();
+
+    // プレビューに変更が反映される
+    await expect(page).toHaveURL(/\/quotes\/[^/]+$/);
+    await expect(page.getByText('編集後の件名テスト')).toBeVisible();
+
+    // 一覧に戻ると受注ステータスになっている
+    await page.getByRole('button', { name: '一覧に戻る' }).click();
+    await expect(page.getByRole('button', { name: /^受注/ })).toContainText('2');
+  });
+
+  test('見積書を削除できる（確認モーダル経由）', async ({ page }) => {
+    await expect(page.locator('tbody tr')).toHaveCount(3);
+    await page.locator('tbody tr').first().click();
+    await page.getByRole('button', { name: '削除' }).click();
+    // 確認モーダル
+    await expect(page.getByText('この操作は取り消せません。')).toBeVisible();
+    await page.getByRole('button', { name: '削除', exact: true }).last().click();
+    // 一覧に戻り 1 件減る
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.locator('tbody tr')).toHaveCount(2);
+  });
+});

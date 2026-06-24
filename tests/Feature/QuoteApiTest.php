@@ -1,0 +1,95 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Customer;
+use App\Models\Quote;
+use Database\Seeders\DemoSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class QuoteApiTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_quotes_index_returns_seeded_data(): void
+    {
+        $this->seed(DemoSeeder::class);
+
+        $res = $this->getJson('/api/quotes');
+        $res->assertOk()->assertJsonCount(3);
+    }
+
+    public function test_store_quote_recalculates_totals_server_side(): void
+    {
+        // フロントが誤った total を送っても、サーバー側で再計算される
+        $payload = [
+            'quote_number' => 'Q-TEST-001',
+            'customer_name' => 'テスト取引先',
+            'status' => 'draft',
+            'tax_rate' => 10,
+            'items' => [
+                ['name' => '商品A', 'quantity' => 3, 'unit_price' => 1000, 'total' => 99999],
+                ['name' => '商品B', 'quantity' => 2, 'unit_price' => 500, 'total' => 0],
+            ],
+        ];
+
+        $res = $this->postJson('/api/quotes', $payload);
+
+        // 小計 = 3*1000 + 2*500 = 4000, 税 = 400, 合計 = 4400
+        $res->assertCreated()
+            ->assertJsonPath('total_amount', 4400)
+            ->assertJsonPath('tax_amount', 400)
+            ->assertJsonPath('items.0.total', 3000);
+
+        $this->assertDatabaseHas('quotes', ['quote_number' => 'Q-TEST-001', 'total_amount' => 4400]);
+    }
+
+    public function test_quote_requires_valid_status(): void
+    {
+        $this->postJson('/api/quotes', ['status' => 'invalid'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('status');
+    }
+
+    public function test_update_and_delete_quote(): void
+    {
+        $quote = Quote::create(['quote_number' => 'Q-1', 'status' => 'draft', 'items' => []]);
+
+        $this->putJson("/api/quotes/{$quote->id}", [
+            'status' => 'accepted',
+            'subject' => '更新後',
+            'items' => [['name' => 'X', 'quantity' => 1, 'unit_price' => 100]],
+        ])->assertOk()->assertJsonPath('status', 'accepted')->assertJsonPath('total_amount', 110);
+
+        $this->deleteJson("/api/quotes/{$quote->id}")->assertNoContent();
+        $this->assertDatabaseMissing('quotes', ['id' => $quote->id]);
+    }
+
+    public function test_customer_requires_name(): void
+    {
+        $this->postJson('/api/customers', [])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['customer_name', 'customer_signature']);
+
+        $this->postJson('/api/customers', ['customer_name' => '株式会社テスト', 'customer_signature' => 'TESTCO'])
+            ->assertCreated()
+            ->assertJsonPath('customer_name', '株式会社テスト')
+            ->assertJsonPath('customer_signature', 'TESTCO');
+    }
+
+    public function test_customer_signature_is_normalized_and_unique(): void
+    {
+        Customer::create(['customer_name' => '既存社', 'customer_signature' => 'CMK']);
+
+        // 小文字入力でも大文字へ正規化して保存
+        $this->postJson('/api/customers', ['customer_name' => '新規社', 'customer_signature' => 'abc'])
+            ->assertCreated()
+            ->assertJsonPath('customer_signature', 'ABC');
+
+        // 大小違いでも既存と衝突するため 422（500 にならない）
+        $this->postJson('/api/customers', ['customer_name' => '重複社', 'customer_signature' => 'cmk'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('customer_signature');
+    }
+}
