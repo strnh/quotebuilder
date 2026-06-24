@@ -144,13 +144,18 @@ class QuoteImportTest extends TestCase
         // 拡張子は合うが中身が表計算でない（偽装）→ per-file エラーで非破壊にスキップ
         $tmp = tempnam(sys_get_temp_dir(), 'imp');
         file_put_contents($tmp, 'plain text, not a spreadsheet');
-        $file = new UploadedFile($tmp, 'H-CMK2026062401.xlsx', null, null, true);
 
-        $res = $this->postJson('/api/quotes/import', ['files' => [$file]]);
+        try {
+            $file = new UploadedFile($tmp, 'H-CMK2026062401.xlsx', null, null, true);
 
-        $res->assertCreated()->assertJsonPath('created', 0);
-        $this->assertStringContainsString('ファイル形式が不正', $res->json('results.0.error'));
-        $this->assertSame(0, Quote::count());
+            $res = $this->postJson('/api/quotes/import', ['files' => [$file]]);
+
+            $res->assertCreated()->assertJsonPath('created', 0);
+            $this->assertStringContainsString('ファイル形式が不正', $res->json('results.0.error'));
+            $this->assertSame(0, Quote::count());
+        } finally {
+            @unlink($tmp);
+        }
     }
 
     public function test_skips_duplicate_quote_number_within_batch(): void

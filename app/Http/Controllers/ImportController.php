@@ -16,6 +16,7 @@ class ImportController extends Controller
 {
     /** 取込対応の表計算拡張子（pdf はレイアウト依存のため現状未対応）。 */
     private const SHEET_EXTS = ['xlsx', 'ods'];
+
     /** 1 リクエストで受け付ける最大ファイル数（バッチ誤用・過負荷ガード）。 */
     private const MAX_FILES = 20;
 
@@ -78,8 +79,9 @@ class ImportController extends Controller
             return ['filename' => $name, 'error' => "{$parsed['ext']} は未対応です（xlsx / ods のみ取込可能）"];
         }
 
-        // 拡張子偽装対策: 内容ベースの MIME を許可リストと突合（パース前に弾いて明確なエラーに）
-        $mime = $file->getMimeType();
+        // 拡張子偽装対策: 内容ベースの MIME を許可リストと突合（パース前に弾いて明確なエラーに）。
+        // getMimeType() は環境により null を返しうるため 'unknown' にフォールバックしメッセージを明確に保つ。
+        $mime = $file->getMimeType() ?? 'unknown';
         if (! in_array($mime, self::ALLOWED_MIMES, true)) {
             return ['filename' => $name, 'error' => "ファイル形式が不正です（検出された種別: {$mime}）"];
         }
