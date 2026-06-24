@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import {
-  FileText, FilePlus, BarChart3, Building2, Users, LogOut, Leaf, type LucideIcon,
+  FileText, FilePlus, Upload, BarChart3, Building2, Users, LogOut, Leaf, type LucideIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -23,6 +23,7 @@ const NAV: NavGroup[] = [
     items: [
       { to: '/', label: '見積書一覧', icon: FileText, end: true },
       { to: '/quotes/new', label: '見積書作成', icon: FilePlus },
+      { to: '/import', label: '見積書取込', icon: Upload },
       { to: '/summary', label: '月末集計', icon: BarChart3 },
     ],
   },

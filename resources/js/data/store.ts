@@ -4,12 +4,13 @@
 // 切替: localStorage.setItem('zensales:adapter', 'local')
 import * as apiAdapter from './adapters/api';
 import * as localAdapter from './adapters/local';
-import type { Customer as TCustomer, EntityAdapter, Quote as TQuote, SenderProfile as TSenderProfile } from '../types';
+import type { Customer as TCustomer, EntityAdapter, ImportResponse, Quote as TQuote, SenderProfile as TSenderProfile } from '../types';
 
 type Adapter = {
   Quote: EntityAdapter<TQuote>;
   Customer: EntityAdapter<TCustomer>;
   SenderProfile: EntityAdapter<TSenderProfile>;
+  importQuotes: (files: File[]) => Promise<ImportResponse>;
   seedIfEmpty: () => void;
 };
 
@@ -26,6 +27,7 @@ const adapter = pick();
 export const Quote = adapter.Quote;
 export const Customer = adapter.Customer;
 export const SenderProfile = adapter.SenderProfile;
+export const importQuotes = adapter.importQuotes;
 export const seedIfEmpty = adapter.seedIfEmpty;
 
 // 見積番号の自動採番: Q-YYYYMM-### (当月連番)
