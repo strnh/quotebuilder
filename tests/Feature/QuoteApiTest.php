@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Models\Quote;
 use Database\Seeders\DemoSeeder;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -64,6 +65,57 @@ class QuoteApiTest extends TestCase
 
         $this->deleteJson("/api/quotes/{$quote->id}")->assertNoContent();
         $this->assertDatabaseMissing('quotes', ['id' => $quote->id]);
+    }
+
+    public function test_store_rejects_duplicate_quote_number(): void
+    {
+        Quote::create(['quote_number' => 'Q-DUP-001', 'items' => []]);
+
+        // 既存と重複する見積番号は 500 ではなく 422（validate と同形式）で弾く
+        $this->postJson('/api/quotes', ['quote_number' => 'Q-DUP-001'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('quote_number');
+
+        $this->assertSame(1, Quote::where('quote_number', 'Q-DUP-001')->count());
+    }
+
+    public function test_allows_multiple_quotes_without_quote_number(): void
+    {
+        // nullable: 番号なし下書きは UNIQUE 制約の対象外で複数作成できる
+        $this->postJson('/api/quotes', ['subject' => '番号なし1'])->assertCreated();
+        $this->postJson('/api/quotes', ['subject' => '番号なし2'])->assertCreated();
+
+        $this->assertSame(2, Quote::whereNull('quote_number')->count());
+    }
+
+    public function test_update_keeping_own_quote_number_is_allowed(): void
+    {
+        // 自分自身の番号は ignore されるため、番号を変えない更新は衝突しない
+        $quote = Quote::create(['quote_number' => 'Q-KEEP-001', 'status' => 'draft', 'items' => []]);
+
+        $this->putJson("/api/quotes/{$quote->id}", [
+            'quote_number' => 'Q-KEEP-001',
+            'status' => 'sent',
+        ])->assertOk()->assertJsonPath('status', 'sent');
+    }
+
+    public function test_update_to_another_existing_quote_number_is_rejected(): void
+    {
+        Quote::create(['quote_number' => 'Q-A', 'items' => []]);
+        $quote = Quote::create(['quote_number' => 'Q-B', 'items' => []]);
+
+        $this->putJson("/api/quotes/{$quote->id}", ['quote_number' => 'Q-A'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('quote_number');
+    }
+
+    public function test_quote_number_unique_constraint_is_enforced_at_db_level(): void
+    {
+        // バリデーションをすり抜けた並行 insert への最終防壁（取込の race backstop）
+        Quote::create(['quote_number' => 'Q-RACE', 'items' => []]);
+
+        $this->expectException(UniqueConstraintViolationException::class);
+        Quote::create(['quote_number' => 'Q-RACE', 'items' => []]);
     }
 
     public function test_customer_requires_name(): void

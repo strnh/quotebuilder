@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Quote;
 use App\Support\QuotePricing;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class QuoteController extends Controller
 {
@@ -42,7 +43,12 @@ class QuoteController extends Controller
     private function validated(Request $request): array
     {
         return $request->validate([
-            'quote_number' => ['nullable', 'string', 'max:100'],
+            // quote_number は DB の UNIQUE 制約と対になる重複ガード（Issue #3）。
+            // nullable のため未設定（null）は対象外＝複数の番号なし下書きは従来どおり作成可能。
+            'quote_number' => [
+                'nullable', 'string', 'max:100',
+                Rule::unique('quotes', 'quote_number')->ignore($request->route('quote')),
+            ],
             'subject' => ['nullable', 'string', 'max:255'],
             'status' => ['nullable', 'in:draft,sent,accepted,rejected'],
             'created_date' => ['nullable', 'date'],

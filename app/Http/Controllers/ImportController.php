@@ -8,6 +8,7 @@ use App\Models\SenderProfile;
 use App\Support\ImportFilename;
 use App\Support\QuotePricing;
 use App\Support\QuoteSheetParser;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Throwable;
@@ -86,9 +87,10 @@ class ImportController extends Controller
             return ['filename' => $name, 'error' => "ファイル形式が不正です（検出された種別: {$mime}）"];
         }
 
-        // 重複ガード: quote_number はファイル名（拡張子抜き）由来。既存と重複する取込は
-        // 行を二重生成せずスキップしてエラー報告する（重複行の生成こそが破壊的なため）。
+        // 重複ガード（事前チェック）: quote_number はファイル名（拡張子抜き）由来。既存と重複する
+        // 取込は行を二重生成せずスキップしてエラー報告する（重複行の生成こそが破壊的なため）。
         // Quote::create が即 insert するため、同一バッチ内の重複もこの DB チェックで拾える。
+        // 並行リクエストで本チェックをすり抜けた場合は、後段の UNIQUE 制約違反捕捉が最終防壁になる。
         $quoteNumber = pathinfo($name, PATHINFO_FILENAME);
         if (Quote::where('quote_number', $quoteNumber)->exists()) {
             return ['filename' => $name, 'error' => "見積番号 {$quoteNumber} は既に存在します（重複のためスキップ）"];
@@ -130,7 +132,12 @@ class ImportController extends Controller
             $warnings[] = "合計不一致: シート {$sheet['sheet_total']} / 再計算 {$data['total_amount']}";
         }
 
-        $quote = Quote::create($data);
+        try {
+            $quote = Quote::create($data);
+        } catch (UniqueConstraintViolationException $e) {
+            // 事前チェックをすり抜けた並行リクエストの最終防壁: DB の UNIQUE 制約が重複を弾く。
+            return ['filename' => $name, 'error' => "見積番号 {$quoteNumber} は既に存在します（重複のためスキップ）"];
+        }
 
         return [
             'filename' => $name,
