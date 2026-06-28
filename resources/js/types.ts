@@ -128,6 +128,22 @@ export interface EntityAdapter<T extends { id: ID }> {
   delete(id: ID): Promise<boolean>;
 }
 
+// バックアップ・リストア
+export interface BackupPayload {
+  version: number;
+  exported_at: string;
+  sender_profiles: SenderProfile[];
+  customers: Customer[];
+  quotes: Quote[];
+}
+
+export interface RestoreResult {
+  inserted: number;
+  skipped: number;
+  updated: number;
+  errors: string[];
+}
+
 // 認証セッション
 export interface AuthUser {
   id: string;

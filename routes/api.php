@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BackupController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\ImportController;
 use App\Http\Controllers\QuoteController;
@@ -14,6 +15,10 @@ Route::apiResource('quotes', QuoteController::class);
 
 // 御見積書ファイル（xlsx/ods）取込: ファイル名で取引先突合し Quote を生成
 Route::post('quotes/import', [ImportController::class, 'store']);
+
+// バックアップ・リストア
+Route::get('backup/download', [BackupController::class, 'download']);
+Route::post('backup/restore', [BackupController::class, 'restore']);
 
 // テスト/デモ用: DB をデモデータに初期化（local 環境のみ）
 Route::post('test/reset', function () {

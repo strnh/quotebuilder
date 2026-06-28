@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import {
-  FileText, FilePlus, Upload, BarChart3, Building2, Users, LogOut, Leaf, type LucideIcon,
+  FileText, FilePlus, Upload, BarChart3, Building2, Users, LogOut, Leaf, Database, type LucideIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -32,6 +32,7 @@ const NAV: NavGroup[] = [
     items: [
       { to: '/sender-profiles', label: '基本情報マスタ', icon: Building2 },
       { to: '/customers', label: '取引先マスタ', icon: Users },
+      { to: '/data', label: 'データ管理', icon: Database },
     ],
   },
 ];

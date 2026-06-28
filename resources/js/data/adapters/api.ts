@@ -1,6 +1,6 @@
 // REST API アダプター（Laravel + SQLite バックエンド）。
 // /api/{customers,sender-profiles,quotes} の apiResource を呼ぶ。
-import type { Customer as TCustomer, EntityAdapter, ID, ImportResponse, Quote as TQuote, SenderProfile as TSenderProfile } from '../../types';
+import type { BackupPayload, Customer as TCustomer, EntityAdapter, ID, ImportResponse, Quote as TQuote, RestoreResult, SenderProfile as TSenderProfile } from '../../types';
 
 interface ApiError extends Error {
   status?: number;
@@ -80,6 +80,33 @@ export async function importQuotes(files: File[]): Promise<ImportResponse> {
     throw err;
   }
   return data as ImportResponse;
+}
+
+// バックアップ: 3テーブルを JSON で返す（ファイル化はフロントが担う）
+export function downloadBackup(): Promise<BackupPayload> {
+  return request<BackupPayload>('GET', '/api/backup/download');
+}
+
+// リストア: multipart で JSON ファイルと mode を送信する
+export async function restoreBackup(file: File, mode: 'skip' | 'overwrite'): Promise<RestoreResult> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('mode', mode);
+
+  const res = await fetch('/api/backup/restore', {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    body: form,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message = data?.message || `リストアに失敗しました (${res.status})`;
+    const err = new Error(message) as ApiError;
+    err.status = res.status;
+    err.errors = data?.errors;
+    throw err;
+  }
+  return data as RestoreResult;
 }
 
 // API モードではサーバー（DemoSeeder）がデータを投入するため no-op
