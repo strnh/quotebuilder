@@ -19,21 +19,25 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        foreach (DB::table('customers')->get(['id', 'customer_signature', 'created_at', 'updated_at']) as $customer) {
-            if (($customer->customer_signature ?? '') === '') {
-                continue;
-            }
+        DB::table('customers')
+            ->select(['id', 'customer_signature', 'created_at', 'updated_at'])
+            ->chunkById(500, function ($customers) {
+                foreach ($customers as $customer) {
+                    if (($customer->customer_signature ?? '') === '') {
+                        continue;
+                    }
 
-            DB::table('customer_signatures')->insert([
-                'customer_id' => $customer->id,
-                'signature' => $customer->customer_signature,
-                'created_at' => $customer->created_at,
-                'updated_at' => $customer->updated_at,
-            ]);
-        }
+                    DB::table('customer_signatures')->insert([
+                        'customer_id' => $customer->id,
+                        'signature' => $customer->customer_signature,
+                        'created_at' => $customer->created_at,
+                        'updated_at' => $customer->updated_at,
+                    ]);
+                }
+            });
 
         Schema::table('customers', function (Blueprint $table) {
-            $table->dropUnique('customers_customer_signature_unique');
+            $table->dropUnique(['customer_signature']);
             $table->dropColumn('customer_signature');
         });
     }
@@ -47,11 +51,13 @@ return new class extends Migration
             $table->string('customer_signature')->nullable()->after('customer_name');
         });
 
-        foreach (DB::table('customer_signatures')->orderBy('id')->get() as $row) {
-            DB::table('customers')->where('id', $row->customer_id)
-                ->whereNull('customer_signature')
-                ->update(['customer_signature' => $row->signature]);
-        }
+        DB::table('customer_signatures')->chunkById(500, function ($signatures) {
+            foreach ($signatures as $row) {
+                DB::table('customers')->where('id', $row->customer_id)
+                    ->whereNull('customer_signature')
+                    ->update(['customer_signature' => $row->signature]);
+            }
+        });
 
         Schema::table('customers', function (Blueprint $table) {
             $table->string('customer_signature')->nullable(false)->unique()->change();
