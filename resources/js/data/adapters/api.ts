@@ -2,7 +2,7 @@
 // /api/{customers,sender-profiles,quotes} の apiResource を呼ぶ。
 import type { BackupPayload, Customer as TCustomer, EntityAdapter, ID, ImportResponse, Quote as TQuote, RestoreResult, SenderProfile as TSenderProfile } from '../../types';
 
-interface ApiError extends Error {
+export interface ApiError extends Error {
   status?: number;
   errors?: Record<string, string[]>;
 }

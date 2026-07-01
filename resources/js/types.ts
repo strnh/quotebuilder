@@ -17,7 +17,7 @@ export interface LineItem {
 export interface Customer {
   id: ID;
   customer_name: string;
-  customer_signature: string;
+  signatures: string[];
   customer_department?: string;
   customer_person?: string;
   customer_zip?: string;
@@ -134,6 +134,7 @@ export interface BackupPayload {
   exported_at: string;
   sender_profiles: SenderProfile[];
   customers: Customer[];
+  customer_signatures: { id: ID; customer_id: ID; signature: string }[];
   quotes: Quote[];
 }
 

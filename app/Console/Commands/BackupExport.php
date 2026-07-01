@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Customer;
+use App\Models\CustomerSignature;
 use App\Models\Quote;
 use App\Models\SenderProfile;
 use Illuminate\Console\Command;
@@ -20,6 +21,7 @@ class BackupExport extends Command
             'exported_at' => now()->toIso8601String(),
             'sender_profiles' => SenderProfile::all()->toArray(),
             'customers' => Customer::all()->toArray(),
+            'customer_signatures' => CustomerSignature::all()->toArray(),
             'quotes' => Quote::all()->toArray(),
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 

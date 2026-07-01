@@ -58,12 +58,25 @@ class ImportFilenameTest extends TestCase
 
     public function test_matches_customer_by_signature(): void
     {
-        $customer = Customer::create(['customer_name' => '株式会社カマキ', 'customer_signature' => 'CMK']);
+        $customer = Customer::create(['customer_name' => '株式会社カマキ']);
+        $customer->signatures()->create(['signature' => 'CMK']);
 
         $this->assertSame($customer->id, ImportFilename::matchCustomer('H-CMK2026062401.pdf')->id);
         // ファイル名の大小混在でも解決
         $this->assertSame($customer->id, ImportFilename::matchCustomer('H-cmk2026062401.pdf')->id);
         // 未登録識別子は null
         $this->assertNull(ImportFilename::matchCustomer('H-XXX2026062401.pdf'));
+    }
+
+    public function test_matches_customer_by_any_of_multiple_signatures(): void
+    {
+        $customer = Customer::create(['customer_name' => '株式会社ワイイングス']);
+        $customer->signatures()->createMany([
+            ['signature' => 'WEI'],
+            ['signature' => 'WEIENG'],
+        ]);
+
+        $this->assertSame($customer->id, ImportFilename::matchCustomer('H-WEI2026062401.pdf')->id);
+        $this->assertSame($customer->id, ImportFilename::matchCustomer('H-WEIENG2026062401.pdf')->id);
     }
 }

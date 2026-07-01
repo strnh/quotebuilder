@@ -103,7 +103,7 @@ class ImportController extends Controller
         }
 
         $warnings = [];
-        $customer = Customer::where('customer_signature', $parsed['signature'])->first();
+        $customer = ImportFilename::matchCustomer($name);
 
         if ($customer === null) {
             $warnings[] = "取引先未突合: 識別子 {$parsed['signature']} に一致する取引先がありません（下書きとして保存）";
