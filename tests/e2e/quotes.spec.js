@@ -51,9 +51,10 @@ test.describe('見積書', () => {
     await page.getByRole('button', { name: /^受注/ }).click();
     await expect(page.locator('tbody tr')).toHaveCount(1);
     await expect(page.getByText('Webシステム開発一式')).toBeVisible();
-    // さらに検索でヒットしない語を入れると 0 件
+    // さらに検索でヒットしない語を入れると 0 件（フィルタ起因の空状態メッセージ）
     await page.getByPlaceholder('顧客名・見積番号で検索...').fill('存在しない語');
     await expect(page.locator('tbody tr')).toHaveCount(0);
+    await expect(page.getByText('条件に一致する見積書がありません')).toBeVisible();
   });
 
   test('行クリックでプレビュー（見積書レイアウト）が開く', async ({ page }) => {

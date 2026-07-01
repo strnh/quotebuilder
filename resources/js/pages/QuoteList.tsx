@@ -13,8 +13,8 @@ type TabValue = 'all' | QuoteStatus;
 const TABS: { value: TabValue; label: string }[] = [{ value: 'all', label: 'すべて' }, ...STATUS_OPTIONS];
 
 function monthLabel(ym: string): string {
-  const [y, m] = ym.split('-');
-  return `${y}年${Number(m)}月`;
+  const m = ym.match(/^(\d{4})-(\d{2})$/);
+  return m ? `${m[1]}年${Number(m[2])}月` : ym;
 }
 
 export default function QuoteList() {
@@ -31,10 +31,10 @@ export default function QuoteList() {
     Customer.list('customer_name').then(setCustomers);
   }, []);
 
-  const counts = TABS.reduce<Record<string, number>>((acc, t) => {
+  const counts = TABS.reduce<Record<TabValue, number>>((acc, t) => {
     acc[t.value] = t.value === 'all' ? rows.length : rows.filter((r) => r.status === t.value).length;
     return acc;
-  }, {});
+  }, {} as Record<TabValue, number>);
 
   // 年月の選択肢は取得済みの見積から導出（YYYY-MM、降順）
   const months = [...new Set(rows.map((r) => r.created_date?.slice(0, 7)).filter((ym): ym is string => !!ym))].sort().reverse();
@@ -92,9 +92,15 @@ export default function QuoteList() {
       </div>
 
       {filtered.length === 0 ? (
-        <Card><EmptyState icon={FileText} title="見積書がありません">
-          <Button onClick={() => navigate('/quotes/new')}><Plus size={16} />新規作成</Button>
-        </EmptyState></Card>
+        <Card>
+          {rows.length === 0 ? (
+            <EmptyState icon={FileText} title="見積書がありません">
+              <Button onClick={() => navigate('/quotes/new')}><Plus size={16} />新規作成</Button>
+            </EmptyState>
+          ) : (
+            <EmptyState icon={Search} title="条件に一致する見積書がありません" />
+          )}
+        </Card>
       ) : (
         <Card className="overflow-hidden">
           <table className="w-full text-sm">
