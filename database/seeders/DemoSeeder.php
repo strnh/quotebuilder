@@ -42,7 +42,6 @@ class DemoSeeder extends Seeder
 
         $c1 = Customer::create([
             'customer_name' => '株式会社アルファ商事',
-            'customer_signature' => 'ALPHA',
             'customer_department' => '購買部',
             'customer_person' => '田中 花子',
             'customer_zip' => '100-0005',
@@ -51,10 +50,10 @@ class DemoSeeder extends Seeder
             'customer_address1' => '丸の内1-1-1',
             'customer_tel' => '03-9876-5432',
         ]);
+        $c1->signatures()->create(['signature' => 'ALPHA']);
 
         $c2 = Customer::create([
             'customer_name' => 'ベータ工業株式会社',
-            'customer_signature' => 'BETA',
             'customer_department' => '資材課',
             'customer_person' => '佐藤 一郎',
             'customer_zip' => '220-0011',
@@ -63,11 +62,11 @@ class DemoSeeder extends Seeder
             'customer_address1' => 'みなとみらい3-2-1',
             'customer_tel' => '045-111-2222',
         ]);
+        $c2->signatures()->create(['signature' => 'BETA']);
 
         // 取込サンプル artifacts/H-CMK2026062401.{xlsx,pdf} と突合できる取引先
-        Customer::create([
+        $c3 = Customer::create([
             'customer_name' => '株式会社カマキ',
-            'customer_signature' => 'CMK',
             'customer_department' => '調達部',
             'customer_person' => '鈴木 次郎',
             'customer_zip' => '530-0001',
@@ -76,6 +75,7 @@ class DemoSeeder extends Seeder
             'customer_address1' => '梅田1-1-1',
             'customer_tel' => '06-1234-5678',
         ]);
+        $c3->signatures()->create(['signature' => 'CMK']);
 
         $senderSnap = collect($sender->toArray())
             ->only([

@@ -1,6 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { Plus, Pencil, Trash2, Users, Search } from 'lucide-react';
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { Plus, Pencil, Trash2, Users, Search, X } from 'lucide-react';
 import { Customer } from '../data/store';
+import type { ApiError } from '../data/adapters/api';
 import { PREFECTURES } from '../lib/format';
 import {
   Button, Card, Input, Select, Field, Modal, EmptyState, useToast,
@@ -11,7 +12,7 @@ import type { Customer as TCustomer, ID } from '../types';
 type CustomerForm = Omit<TCustomer, 'id'>;
 
 const EMPTY: CustomerForm = {
-  customer_name: '', customer_signature: '', customer_department: '', customer_person: '',
+  customer_name: '', signatures: [], customer_department: '', customer_person: '',
   customer_zip: '', customer_pref: '', customer_city: '',
   customer_address1: '', customer_address2: '', customer_tel: '',
 };
@@ -25,29 +26,59 @@ export default function Customers() {
   const [editing, setEditing] = useState<TCustomer | Record<string, never> | null>(null);
   const [form, setForm] = useState<CustomerForm>(EMPTY);
   const [deleteId, setDeleteId] = useState<ID | null>(null);
+  const [sigInput, setSigInput] = useState('');
 
   const load = async () => setRows(await Customer.list('-created_date'));
   useEffect(() => { load(); }, []);
 
-  const openNew = () => { setForm(EMPTY); setEditing({}); };
-  const openEdit = (row: TCustomer) => { setForm({ ...EMPTY, ...row }); setEditing(row); };
+  const openNew = () => { setForm(EMPTY); setSigInput(''); setEditing({}); };
+  const openEdit = (row: TCustomer) => { setForm({ ...EMPTY, ...row }); setSigInput(''); setEditing(row); };
   const set = <K extends keyof CustomerForm>(k: K, v: CustomerForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const editingId = editing && 'id' in editing ? (editing as TCustomer).id : undefined;
 
+  const addSignature = () => {
+    const v = sigInput.trim().toUpperCase();
+    if (!v) return;
+    if (!SIGNATURE_RE.test(v)) { toast('取引先識別子は英数字で入力してください', 'error'); return; }
+    if (form.signatures.includes(v)) { toast('すでに追加されています', 'error'); return; }
+    set('signatures', [...form.signatures, v]);
+    setSigInput('');
+  };
+  const removeSignature = (v: string) => set('signatures', form.signatures.filter((s) => s !== v));
+  const onSigKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addSignature(); }
+  };
+
   const save = async (e: FormEvent) => {
     e.preventDefault();
     if (!form.customer_name.trim()) { toast('会社名・組織名を入力してください', 'error'); return; }
-    if (!SIGNATURE_RE.test(form.customer_signature)) { toast('取引先識別子は英数字で入力してください', 'error'); return; }
-    if (editingId) {
-      await Customer.update(editingId, form);
-      toast('更新しました');
-    } else {
-      await Customer.create(form);
-      toast('登録しました');
+
+    // 「追加」を押し忘れて未確定のまま保存された入力値も識別子として確定させる
+    const pending = sigInput.trim().toUpperCase();
+    let signatures = form.signatures;
+    if (pending) {
+      if (!SIGNATURE_RE.test(pending)) { toast('取引先識別子は英数字で入力してください', 'error'); return; }
+      if (!signatures.includes(pending)) signatures = [...signatures, pending];
     }
-    setEditing(null);
-    load();
+    if (signatures.length === 0) { toast('取引先識別子を1つ以上追加してください', 'error'); return; }
+
+    try {
+      if (editingId) {
+        await Customer.update(editingId, { ...form, signatures });
+        toast('更新しました');
+      } else {
+        await Customer.create({ ...form, signatures });
+        toast('登録しました');
+      }
+      setEditing(null);
+      setSigInput('');
+      load();
+    } catch (err) {
+      const apiErr = err as ApiError;
+      const firstError = Object.values(apiErr.errors ?? {})[0]?.[0];
+      toast(firstError ?? apiErr.message ?? '保存に失敗しました', 'error');
+    }
   };
 
   const remove = async () => {
@@ -60,7 +91,7 @@ export default function Customers() {
 
   const filtered = rows.filter((r) =>
     !query || r.customer_name?.includes(query) || r.customer_person?.includes(query)
-    || r.customer_signature?.toUpperCase().includes(query.toUpperCase())
+    || r.signatures?.some((s) => s.toUpperCase().includes(query.toUpperCase()))
   );
 
   return (
@@ -84,13 +115,13 @@ export default function Customers() {
             <Card key={row.id} className="p-5">
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-bold text-neutral-800">{row.customer_name}</h3>
-                    {row.customer_signature && (
-                      <span className="shrink-0 rounded bg-primary-50 px-1.5 py-0.5 font-mono text-[11px] text-primary-700">
-                        {row.customer_signature}
+                    {row.signatures?.map((s) => (
+                      <span key={s} className="shrink-0 rounded bg-primary-50 px-1.5 py-0.5 font-mono text-[11px] text-primary-700">
+                        {s}
                       </span>
-                    )}
+                    ))}
                   </div>
                   <p className="mt-0.5 text-xs text-neutral-500">
                     {[row.customer_department, row.customer_person && `${row.customer_person} 様`].filter(Boolean).join(' / ')}
@@ -130,12 +161,34 @@ export default function Customers() {
             </Field>
           </div>
           <div className="sm:col-span-2">
-            <Field label="取引先識別子" required hint="英数字。取込ファイル名 H-[識別子][日付].xlsx の照合に使います（例: CMK）">
-              <Input
-                value={form.customer_signature}
-                onChange={(e) => set('customer_signature', e.target.value.toUpperCase())}
-                placeholder="CMK"
-              />
+            <Field label="取引先識別子" required hint="英数字。取込ファイル名 H-[識別子][日付].xlsx の照合に使います（複数登録可・例: CMK, WEI）">
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {form.signatures.map((s) => (
+                  <span
+                    key={s}
+                    className="flex items-center gap-1 rounded bg-primary-50 px-2 py-1 font-mono text-xs text-primary-700"
+                  >
+                    {s}
+                    <button
+                      type="button"
+                      onClick={() => removeSignature(s)}
+                      className="text-primary-400 hover:text-primary-700"
+                      aria-label={`${s} を削除`}
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={sigInput}
+                  onChange={(e) => setSigInput(e.target.value.toUpperCase())}
+                  onKeyDown={onSigKeyDown}
+                  placeholder="CMK"
+                />
+                <Button type="button" variant="secondary" onClick={addSignature}>追加</Button>
+              </div>
             </Field>
           </div>
           <Field label="部署名">

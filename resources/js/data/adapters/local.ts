@@ -137,10 +137,10 @@ export function seedIfEmpty(): void {
   write('sender_profiles', [sender]);
 
   const customers: TCustomer[] = [
-    { id: uid(), customer_name: '株式会社アルファ商事', customer_signature: 'ALPHA', customer_department: '購買部', customer_person: '田中 花子',
+    { id: uid(), customer_name: '株式会社アルファ商事', signatures: ['ALPHA'], customer_department: '購買部', customer_person: '田中 花子',
       customer_zip: '100-0005', customer_pref: '東京都', customer_city: '千代田区', customer_address1: '丸の内1-1-1',
       customer_address2: '', customer_tel: '03-9876-5432', created_date: nowISO() },
-    { id: uid(), customer_name: 'ベータ工業株式会社', customer_signature: 'BETA', customer_department: '資材課', customer_person: '佐藤 一郎',
+    { id: uid(), customer_name: 'ベータ工業株式会社', signatures: ['BETA'], customer_department: '資材課', customer_person: '佐藤 一郎',
       customer_zip: '220-0011', customer_pref: '神奈川県', customer_city: '横浜市西区', customer_address1: 'みなとみらい3-2-1',
       customer_address2: '', customer_tel: '045-111-2222', created_date: nowISO() },
   ];
