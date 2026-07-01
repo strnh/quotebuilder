@@ -111,7 +111,10 @@ class BackupRestorer
                     $restoredIds[] = $id;
                 }
             } catch (QueryException $e) {
-                $isUnique = str_contains($e->getMessage(), 'UNIQUE') || str_contains((string) $e->getCode(), '23');
+                $message = strtolower($e->getMessage());
+                $isUnique = str_contains($message, 'unique constraint')
+                    || str_contains($message, 'duplicate entry')
+                    || str_contains($message, 'duplicate key');
                 if ($isUnique && $mode === 'skip') {
                     $summary['skipped']++;
                 } elseif ($isUnique) {
