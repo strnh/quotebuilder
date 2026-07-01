@@ -2,24 +2,33 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, FileText } from 'lucide-react';
 import clsx from 'clsx';
-import { Quote } from '../data/store';
+import { Quote, Customer } from '../data/store';
 import { quoteTotals } from '../lib/calc';
 import { yen, jpDate, STATUS_OPTIONS, STATUS_LABEL, STATUS_STYLE } from '../lib/format';
-import { Button, Card, Input, Badge, EmptyState } from '../components/ui';
+import { Button, Card, Input, Select, Badge, EmptyState } from '../components/ui';
 import PageHeader from '../components/PageHeader';
-import type { Quote as TQuote, QuoteStatus } from '../types';
+import type { Customer as TCustomer, Quote as TQuote, QuoteStatus } from '../types';
 
 type TabValue = 'all' | QuoteStatus;
 const TABS: { value: TabValue; label: string }[] = [{ value: 'all', label: 'すべて' }, ...STATUS_OPTIONS];
 
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split('-');
+  return `${y}年${Number(m)}月`;
+}
+
 export default function QuoteList() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<TQuote[]>([]);
+  const [customers, setCustomers] = useState<TCustomer[]>([]);
   const [tab, setTab] = useState<TabValue>('all');
   const [query, setQuery] = useState('');
+  const [month, setMonth] = useState('');
+  const [customerId, setCustomerId] = useState('');
 
   useEffect(() => {
     Quote.list('-created_date').then(setRows);
+    Customer.list('customer_name').then(setCustomers);
   }, []);
 
   const counts = TABS.reduce<Record<string, number>>((acc, t) => {
@@ -27,9 +36,19 @@ export default function QuoteList() {
     return acc;
   }, {});
 
+  // 年月の選択肢は取得済みの見積から導出（YYYY-MM、降順）
+  const months = [...new Set(rows.map((r) => r.created_date?.slice(0, 7)).filter((ym): ym is string => !!ym))].sort().reverse();
+
+  // 古い見積は customer_id を持たない（スナップショットのみ）ため customer_name でも突合する
+  const selectedCustomer = customers.find((c) => String(c.id) === customerId);
+  const matchesCustomer = (r: TQuote) =>
+    !selectedCustomer || String(r.customer_id) === customerId || r.customer_name === selectedCustomer.customer_name;
+
   const filtered = rows
     .filter((r) => tab === 'all' || r.status === tab)
-    .filter((r) => !query || r.customer_name?.includes(query) || r.quote_number?.includes(query) || r.subject?.includes(query));
+    .filter((r) => !query || r.customer_name?.includes(query) || r.quote_number?.includes(query) || r.subject?.includes(query))
+    .filter((r) => !month || r.created_date?.slice(0, 7) === month)
+    .filter(matchesCustomer);
 
   return (
     <div>
@@ -56,12 +75,20 @@ export default function QuoteList() {
         ))}
       </div>
 
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="relative max-w-sm flex-1">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative max-w-sm flex-1 basis-56">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
           <Input className="pl-9" placeholder="顧客名・見積番号で検索..." value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
-        <span className="text-sm text-neutral-500">{filtered.length}件の見積書</span>
+        <Select className="w-auto" aria-label="年月で絞り込み" value={month} onChange={(e) => setMonth(e.target.value)}>
+          <option value="">すべての年月</option>
+          {months.map((ym) => <option key={ym} value={ym}>{monthLabel(ym)}</option>)}
+        </Select>
+        <Select className="w-auto" aria-label="取引先で絞り込み" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+          <option value="">すべての取引先</option>
+          {customers.map((c) => <option key={c.id} value={String(c.id)}>{c.customer_name}</option>)}
+        </Select>
+        <span className="ml-auto text-sm text-neutral-500">{filtered.length}件の見積書</span>
       </div>
 
       {filtered.length === 0 ? (
