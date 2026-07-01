@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class BackupRestorer
 {
@@ -12,6 +14,7 @@ class BackupRestorer
      */
     public function restore(array $data, string $mode): array
     {
+        $this->validateRows($data);
         $data = $this->normalizeLegacyCustomerSignatures($data);
         $summary = ['inserted' => 0, 'skipped' => 0, 'updated' => 0, 'errors' => []];
 
@@ -40,6 +43,38 @@ class BackupRestorer
         });
 
         return $summary;
+    }
+
+    /**
+     * テーブルダンプとして最低限必要な行形式と主キーを検証する。
+     */
+    private function validateRows(array $data): void
+    {
+        foreach (['sender_profiles', 'customers', 'customer_signatures', 'quotes'] as $table) {
+            if (! array_key_exists($table, $data)) {
+                continue;
+            }
+
+            if (! is_array($data[$table])) {
+                throw ValidationException::withMessages([
+                    'file' => ["{$table} は配列である必要があります。"],
+                ]);
+            }
+
+            foreach ($data[$table] as $index => $row) {
+                if (! is_array($row) || ! array_key_exists('id', $row)) {
+                    throw ValidationException::withMessages([
+                        'file' => ["{$table}.{$index} は id を持つオブジェクトである必要があります。"],
+                    ]);
+                }
+
+                if ($table === 'customer_signatures' && ! array_key_exists('customer_id', $row)) {
+                    throw ValidationException::withMessages([
+                        'file' => ["{$table}.{$index} に customer_id が必要です。"],
+                    ]);
+                }
+            }
+        }
     }
 
     /**
@@ -98,9 +133,7 @@ class BackupRestorer
 
             try {
                 if ($exists) {
-                    DB::table($table)->where('id', $id)->update(
-                        array_merge($row, ['updated_at' => now()->toDateTimeString()])
-                    );
+                    DB::table($table)->where('id', $id)->update(Arr::except($row, ['id']));
                     $summary['updated']++;
                 } else {
                     DB::table($table)->insert($row);

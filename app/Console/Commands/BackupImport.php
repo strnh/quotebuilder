@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\BackupRestorer;
 use Illuminate\Console\Command;
+use Illuminate\Validation\ValidationException;
 
 class BackupImport extends Command
 {
@@ -42,7 +43,13 @@ class BackupImport extends Command
             return self::FAILURE;
         }
 
-        $summary = $restorer->restore($data, $mode);
+        try {
+            $summary = $restorer->restore($data, $mode);
+        } catch (ValidationException $e) {
+            $this->error($e->errors()['file'][0] ?? 'バックアップファイルの形式が不正です。');
+
+            return self::FAILURE;
+        }
 
         $this->table(['挿入', 'スキップ', '更新', 'エラー'], [
             [$summary['inserted'], $summary['skipped'], $summary['updated'], count($summary['errors'])],

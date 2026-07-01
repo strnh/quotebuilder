@@ -124,15 +124,21 @@ class BackupTest extends TestCase
     public function test_restore_overwrite_updates_existing_record(): void
     {
         $sp = SenderProfile::create(['sender_company' => '元の会社名']);
+        $snapshotTime = now()->subDays(3)->startOfSecond()->toDateTimeString();
 
         $payload = $this->makeBackup(
-            senderProfiles: [['id' => $sp->id, 'sender_company' => '上書き後の名前', 'is_default' => false, 'created_at' => now(), 'updated_at' => now()]],
+            senderProfiles: [['id' => $sp->id, 'sender_company' => '上書き後の名前', 'is_default' => false, 'created_at' => $snapshotTime, 'updated_at' => $snapshotTime]],
         );
 
         $res = $this->postMultipart('/api/backup/restore', $payload, 'overwrite');
 
         $res->assertOk()->assertJsonPath('updated', 1)->assertJsonPath('inserted', 0);
-        $this->assertDatabaseHas('sender_profiles', ['sender_company' => '上書き後の名前']);
+        $this->assertDatabaseHas('sender_profiles', [
+            'id' => $sp->id,
+            'sender_company' => '上書き後の名前',
+            'created_at' => $snapshotTime,
+            'updated_at' => $snapshotTime,
+        ]);
     }
 
     public function test_restore_overwrite_updates_customer_and_its_signature(): void
@@ -184,6 +190,24 @@ class BackupTest extends TestCase
         $file = UploadedFile::fake()->createWithContent('backup.json', $payload);
 
         $this->call('POST', '/api/backup/restore', ['mode' => 'skip'], [], ['file' => $file], ['Accept' => 'application/json'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('file');
+    }
+
+    public function test_restore_rejects_non_array_table_rows(): void
+    {
+        $payload = json_encode(['version' => 1, 'customers' => 'invalid']);
+
+        $this->postRestore($payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('file');
+    }
+
+    public function test_restore_rejects_row_without_id(): void
+    {
+        $payload = json_encode(['version' => 1, 'customers' => [['customer_name' => 'IDなし商事']]]);
+
+        $this->postRestore($payload)
             ->assertStatus(422)
             ->assertJsonValidationErrors('file');
     }
@@ -253,6 +277,21 @@ class BackupTest extends TestCase
 
         $this->artisan("backup:import {$path} --mode=skip")->assertSuccessful();
         $this->assertDatabaseMissing('customer_signatures', ['signature' => 'CLIBETA']);
+
+        unlink($path);
+    }
+
+    public function test_artisan_import_rejects_row_without_id(): void
+    {
+        $path = sys_get_temp_dir().'/backup-import-invalid-'.uniqid().'.json';
+        file_put_contents($path, json_encode([
+            'version' => 1,
+            'customers' => [['customer_name' => 'IDなし商事']],
+        ]));
+
+        $this->artisan("backup:import {$path}")
+            ->assertFailed()
+            ->expectsOutputToContain('id を持つオブジェクト');
 
         unlink($path);
     }
