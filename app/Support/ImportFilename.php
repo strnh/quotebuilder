@@ -3,7 +3,6 @@
 namespace App\Support;
 
 use App\Models\Customer;
-use App\Models\CustomerSignature;
 
 /**
  * 取込ファイル名の規則 `H-[取引先識別子][日付(YYYYMMDD)][連番(任意2桁)].拡張子` を解釈し、
@@ -50,6 +49,9 @@ class ImportFilename
             return null;
         }
 
-        return CustomerSignature::where('signature', $parsed['signature'])->first()?->customer;
+        return Customer::whereHas(
+            'signatures',
+            fn ($query) => $query->where('signature', $parsed['signature'])
+        )->first();
     }
 }

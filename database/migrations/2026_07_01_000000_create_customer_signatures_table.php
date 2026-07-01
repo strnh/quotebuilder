@@ -60,7 +60,8 @@ return new class extends Migration
         });
 
         Schema::table('customers', function (Blueprint $table) {
-            $table->string('customer_signature')->nullable(false)->unique()->change();
+            // 複数識別子から単一値へ戻せない顧客や、識別子未登録の顧客もロールバック可能にする。
+            $table->string('customer_signature')->nullable()->unique()->change();
         });
 
         Schema::dropIfExists('customer_signatures');

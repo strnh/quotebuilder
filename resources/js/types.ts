@@ -133,7 +133,7 @@ export interface BackupPayload {
   version: number;
   exported_at: string;
   sender_profiles: SenderProfile[];
-  customers: Customer[];
+  customers: Omit<Customer, 'signatures'>[];
   customer_signatures: { id: ID; customer_id: ID; signature: string }[];
   quotes: Quote[];
 }
