@@ -122,26 +122,35 @@ class QuoteApiTest extends TestCase
     {
         $this->postJson('/api/customers', [])
             ->assertStatus(422)
-            ->assertJsonValidationErrors(['customer_name', 'customer_signature']);
+            ->assertJsonValidationErrors(['customer_name', 'signatures']);
 
-        $this->postJson('/api/customers', ['customer_name' => '株式会社テスト', 'customer_signature' => 'TESTCO'])
+        $this->postJson('/api/customers', ['customer_name' => '株式会社テスト', 'signatures' => ['TESTCO']])
             ->assertCreated()
             ->assertJsonPath('customer_name', '株式会社テスト')
-            ->assertJsonPath('customer_signature', 'TESTCO');
+            ->assertJsonPath('signatures.0', 'TESTCO');
     }
 
     public function test_customer_signature_is_normalized_and_unique(): void
     {
-        Customer::create(['customer_name' => '既存社', 'customer_signature' => 'CMK']);
+        $existing = Customer::create(['customer_name' => '既存社']);
+        $existing->signatures()->create(['signature' => 'CMK']);
 
         // 小文字入力でも大文字へ正規化して保存
-        $this->postJson('/api/customers', ['customer_name' => '新規社', 'customer_signature' => 'abc'])
+        $this->postJson('/api/customers', ['customer_name' => '新規社', 'signatures' => ['abc']])
             ->assertCreated()
-            ->assertJsonPath('customer_signature', 'ABC');
+            ->assertJsonPath('signatures.0', 'ABC');
 
         // 大小違いでも既存と衝突するため 422（500 にならない）
-        $this->postJson('/api/customers', ['customer_name' => '重複社', 'customer_signature' => 'cmk'])
+        $this->postJson('/api/customers', ['customer_name' => '重複社', 'signatures' => ['cmk']])
             ->assertStatus(422)
-            ->assertJsonValidationErrors('customer_signature');
+            ->assertJsonValidationErrors('signatures.0');
+    }
+
+    public function test_customer_can_have_multiple_signatures(): void
+    {
+        $res = $this->postJson('/api/customers', ['customer_name' => '株式会社ワイイングス', 'signatures' => ['WEI', 'WEIENG']])
+            ->assertCreated();
+
+        $this->assertSame(['WEI', 'WEIENG'], $res->json('signatures'));
     }
 }

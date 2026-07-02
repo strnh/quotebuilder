@@ -46,7 +46,7 @@ class QuoteImportTest extends TestCase
     public function test_imports_xlsx_and_matches_customer(): void
     {
         $this->seed(DemoSeeder::class);
-        $cmk = Customer::where('customer_signature', 'CMK')->firstOrFail();
+        $cmk = Customer::whereHas('signatures', fn ($q) => $q->where('signature', 'CMK'))->firstOrFail();
 
         $res = $this->postJson('/api/quotes/import', ['files' => [$this->upload()]]);
 

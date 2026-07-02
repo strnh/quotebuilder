@@ -13,6 +13,7 @@ import QuotePreview from './pages/QuotePreview';
 import Summary from './pages/Summary';
 import SenderProfiles from './pages/SenderProfiles';
 import Customers from './pages/Customers';
+import DataManagement from './pages/DataManagement';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -39,6 +40,7 @@ export default function App() {
       <Route path="/summary" element={<RequireAuth><Summary /></RequireAuth>} />
       <Route path="/sender-profiles" element={<RequireAuth><SenderProfiles /></RequireAuth>} />
       <Route path="/customers" element={<RequireAuth><Customers /></RequireAuth>} />
+      <Route path="/data" element={<RequireAuth><DataManagement /></RequireAuth>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

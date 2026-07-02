@@ -3,33 +3,65 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\CustomerSignature;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
 
 class CustomerController extends Controller
 {
     public function index()
     {
-        return Customer::orderByDesc('created_at')->get();
+        return Customer::with('signatures')->orderByDesc('created_at')->get()
+            ->map(fn (Customer $c) => $this->present($c));
     }
 
     public function store(Request $request)
     {
         $data = $this->validated($request);
+        $signatures = $data['signatures'];
+        unset($data['signatures']);
 
-        return response()->json(Customer::create($data), 201);
+        $customer = DB::transaction(function () use ($data, $signatures) {
+            $customer = Customer::create($data);
+            $customer->signatures()->createMany(
+                array_map(fn (string $s) => ['signature' => $s], $signatures)
+            );
+
+            return $customer;
+        });
+
+        return response()->json($this->present($customer->load('signatures')), 201);
     }
 
     public function show(Customer $customer)
     {
-        return $customer;
+        return $this->present($customer->load('signatures'));
     }
 
     public function update(Request $request, Customer $customer)
     {
-        $customer->update($this->validated($request));
+        $data = $this->validated($request);
+        $signatures = $data['signatures'];
+        unset($data['signatures']);
 
-        return $customer;
+        DB::transaction(function () use ($customer, $data, $signatures) {
+            $customer->update($data);
+            $customer->signatures()->delete();
+            $customer->signatures()->createMany(
+                array_map(fn (string $s) => ['signature' => $s], $signatures)
+            );
+        });
+
+        return $this->present($customer->fresh('signatures'));
+    }
+
+    /** フロントには signatures を関連レコードではなく文字列配列として渡す。 */
+    private function present(Customer $customer): array
+    {
+        $data = $customer->toArray();
+        $data['signatures'] = $customer->signatures->pluck('signature')->values()->all();
+
+        return $data;
     }
 
     public function destroy(Customer $customer)
@@ -41,14 +73,31 @@ class CustomerController extends Controller
 
     private function validated(Request $request): array
     {
-        // 取込突合のため signature は大文字へ正規化。unique 判定を正規化後の値で行うため validate より前に merge する。
-        $request->merge(['customer_signature' => strtoupper((string) $request->input('customer_signature'))]);
+        // 取込突合のため signature は大文字へ正規化・重複除去。unique 判定を正規化後の値で行うため validate より前に merge する。
+        // 「配列かつ全要素が文字列」の場合のみ正規化し、それ以外は validate の array / string ルールで 422 にする
+        // （非文字列要素を (string) キャストすると "Array" 等になり型チェックをすり抜けるため）。
+        $signatures = $request->input('signatures', []);
+        if (is_array($signatures) && ! array_filter($signatures, fn ($s) => ! is_string($s))) {
+            $signatures = array_values(array_unique(array_map(
+                fn (string $s) => strtoupper(trim($s)),
+                $signatures
+            )));
+            $request->merge(['signatures' => $signatures]);
+        }
 
         return $request->validate([
             'customer_name' => ['required', 'string', 'max:255'],
-            'customer_signature' => [
-                'required', 'string', 'max:50', 'regex:/^[A-Za-z0-9]+$/',
-                Rule::unique('customers', 'customer_signature')->ignore($request->route('customer')),
+            'signatures' => ['required', 'array', 'min:1'],
+            'signatures.*' => [
+                'string', 'max:50', 'regex:/^[A-Za-z0-9]+$/',
+                function ($attribute, $value, $fail) use ($request) {
+                    $exists = CustomerSignature::where('signature', $value)
+                        ->when($request->route('customer'), fn ($q, $c) => $q->where('customer_id', '!=', $c->id))
+                        ->exists();
+                    if ($exists) {
+                        $fail("識別子 {$value} は既に他の取引先で使用されています。");
+                    }
+                },
             ],
             'customer_department' => ['nullable', 'string', 'max:255'],
             'customer_person' => ['nullable', 'string', 'max:255'],

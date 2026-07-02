@@ -17,7 +17,7 @@ export interface LineItem {
 export interface Customer {
   id: ID;
   customer_name: string;
-  customer_signature: string;
+  signatures: string[];
   customer_department?: string;
   customer_person?: string;
   customer_zip?: string;
@@ -126,6 +126,23 @@ export interface EntityAdapter<T extends { id: ID }> {
   create(data: Partial<T>): Promise<T>;
   update(id: ID, data: Partial<T>): Promise<T | null>;
   delete(id: ID): Promise<boolean>;
+}
+
+// バックアップ・リストア
+export interface BackupPayload {
+  version: number;
+  exported_at: string;
+  sender_profiles: SenderProfile[];
+  customers: Omit<Customer, 'signatures'>[];
+  customer_signatures: { id: ID; customer_id: ID; signature: string; created_at?: string; updated_at?: string }[];
+  quotes: Quote[];
+}
+
+export interface RestoreResult {
+  inserted: number;
+  skipped: number;
+  updated: number;
+  errors: string[];
 }
 
 // 認証セッション

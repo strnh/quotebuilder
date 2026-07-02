@@ -6,7 +6,7 @@ use App\Models\Customer;
 
 /**
  * 取込ファイル名の規則 `H-[取引先識別子][日付(YYYYMMDD)][連番(任意2桁)].拡張子` を解釈し、
- * 取引先識別子（customer_signature）で取引先マスタへ突合する。
+ * 取引先識別子（customer_signatures.signature、1取引先が複数登録可）で取引先マスタへ突合する。
  *
  * 例: H-CMK2026062401.xlsx → signature=CMK / date=2026-06-24 / sequence=01
  */
@@ -49,6 +49,9 @@ class ImportFilename
             return null;
         }
 
-        return Customer::where('customer_signature', $parsed['signature'])->first();
+        return Customer::whereHas(
+            'signatures',
+            fn ($query) => $query->where('signature', $parsed['signature'])
+        )->first();
     }
 }
