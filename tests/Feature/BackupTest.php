@@ -27,7 +27,7 @@ class BackupTest extends TestCase
 
         $res->assertOk()
             ->assertJsonStructure(['version', 'exported_at', 'sender_profiles', 'customers', 'customer_signatures', 'quotes'])
-            ->assertJsonPath('version', 1)
+            ->assertJsonPath('version', 2)
             ->assertJsonCount(1, 'sender_profiles')
             ->assertJsonCount(1, 'customers')
             ->assertJsonCount(1, 'customer_signatures')
@@ -212,6 +212,44 @@ class BackupTest extends TestCase
             ->assertJsonValidationErrors('file');
     }
 
+    public function test_restore_rejects_row_missing_required_column(): void
+    {
+        // customer_name（NOT NULL）欠落は DB エラー(500)ではなく 422 で拒否する。
+        $payload = json_encode(['version' => 2, 'customers' => [['id' => 1]]]);
+
+        $this->postRestore($payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('file');
+    }
+
+    public function test_restore_normalizes_signature_to_uppercase(): void
+    {
+        $payload = $this->makeBackup(
+            customers: [['id' => 1, 'customer_name' => '正規化商事', 'created_at' => now(), 'updated_at' => now()]],
+            customerSignatures: [['id' => 1, 'customer_id' => 1, 'signature' => ' mixedCase ', 'created_at' => now(), 'updated_at' => now()]],
+        );
+
+        $this->postRestore($payload)->assertOk()->assertJsonPath('errors', []);
+        $this->assertDatabaseHas('customer_signatures', ['customer_id' => 1, 'signature' => 'MIXEDCASE']);
+    }
+
+    public function test_restore_normalizes_legacy_signature_to_uppercase(): void
+    {
+        $payload = json_encode([
+            'version' => 1,
+            'customers' => [[
+                'id' => 11,
+                'customer_name' => '旧形式小文字商事',
+                'customer_signature' => 'legacylower',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]],
+        ]);
+
+        $this->postRestore($payload)->assertOk()->assertJsonPath('errors', []);
+        $this->assertDatabaseHas('customer_signatures', ['customer_id' => 11, 'signature' => 'LEGACYLOWER']);
+    }
+
     // ---------- artisan ----------
 
     public function test_artisan_export_outputs_valid_json(): void
@@ -227,7 +265,7 @@ class BackupTest extends TestCase
         $this->artisan("backup:export --output={$path}")->assertSuccessful();
 
         $data = json_decode(file_get_contents($path), true);
-        $this->assertSame(1, $data['version']);
+        $this->assertSame(2, $data['version']);
 
         unlink($path);
     }
@@ -301,7 +339,7 @@ class BackupTest extends TestCase
     private function makeBackup(array $senderProfiles = [], array $customers = [], array $customerSignatures = [], array $quotes = []): string
     {
         return json_encode([
-            'version' => 1,
+            'version' => 2,
             'exported_at' => now()->toIso8601String(),
             'sender_profiles' => $senderProfiles,
             'customers' => $customers,

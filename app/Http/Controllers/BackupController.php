@@ -16,7 +16,7 @@ class BackupController extends Controller
     public function download(): JsonResponse
     {
         return response()->json([
-            'version' => 1,
+            'version' => BackupRestorer::VERSION,
             'exported_at' => now()->toIso8601String(),
             'sender_profiles' => SenderProfile::all()->toArray(),
             'customers' => Customer::all()->toArray(),
@@ -39,7 +39,7 @@ class BackupController extends Controller
             throw ValidationException::withMessages(['file' => ['有効なバックアップファイルではありません。']]);
         }
 
-        if ($data['version'] !== 1) {
+        if (! in_array($data['version'], BackupRestorer::SUPPORTED_VERSIONS, true)) {
             throw ValidationException::withMessages(['file' => ["サポートされていないバージョンです (version={$data['version']})。"]]);
         }
 

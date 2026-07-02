@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\CustomerSignature;
 use App\Models\Quote;
 use App\Models\SenderProfile;
+use App\Services\BackupRestorer;
 use Illuminate\Console\Command;
 
 class BackupExport extends Command
@@ -17,7 +18,7 @@ class BackupExport extends Command
     public function handle(): int
     {
         $payload = json_encode([
-            'version' => 1,
+            'version' => BackupRestorer::VERSION,
             'exported_at' => now()->toIso8601String(),
             'sender_profiles' => SenderProfile::all()->toArray(),
             'customers' => Customer::all()->toArray(),

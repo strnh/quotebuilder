@@ -37,7 +37,7 @@ class BackupImport extends Command
             return self::FAILURE;
         }
 
-        if ($data['version'] !== 1) {
+        if (! in_array($data['version'], BackupRestorer::SUPPORTED_VERSIONS, true)) {
             $this->error("サポートされていないバージョンです (version={$data['version']})。");
 
             return self::FAILURE;

@@ -29,7 +29,8 @@ return new class extends Migration
 
                     DB::table('customer_signatures')->insert([
                         'customer_id' => $customer->id,
-                        'signature' => $customer->customer_signature,
+                        // 取込突合（ImportFilename は strtoupper で比較）に合わせて正規化する。
+                        'signature' => strtoupper(trim($customer->customer_signature)),
                         'created_at' => $customer->created_at,
                         'updated_at' => $customer->updated_at,
                     ]);

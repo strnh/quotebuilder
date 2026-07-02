@@ -9,6 +9,12 @@ use Illuminate\Validation\ValidationException;
 
 class BackupRestorer
 {
+    /** エクスポート形式のバージョン。2 で customers から customer_signatures を分離した。 */
+    public const VERSION = 2;
+
+    /** 復元を受け付けるバージョン。1 は customers[].customer_signature を含む旧形式。 */
+    public const SUPPORTED_VERSIONS = [1, 2];
+
     /**
      * @return array{inserted: int, skipped: int, updated: int, errors: array<int, string>}
      */
@@ -31,7 +37,12 @@ class BackupRestorer
                     $summary['skipped']++;
                 }
             }
-            $this->restoreRows('customer_signatures', $signatureRows, $mode, $summary);
+            $this->restoreRows('customer_signatures', $signatureRows, $mode, $summary, function (array $row): array {
+                // 取込突合（ImportFilename は strtoupper で比較）と UNIQUE 判定を正規化後の値で行う。
+                $row['signature'] = self::normalizeSignature($row['signature']);
+
+                return $row;
+            });
 
             $this->restoreRows('quotes', $data['quotes'] ?? [], $mode, $summary, function (array $row): array {
                 if (isset($row['items']) && is_array($row['items'])) {
@@ -46,11 +57,19 @@ class BackupRestorer
     }
 
     /**
-     * テーブルダンプとして最低限必要な行形式と主キーを検証する。
+     * テーブルダンプとして最低限必要な行形式・主キー・NOT NULL カラムを検証する。
+     * ここで弾かないと DB の制約違反（500）になるカラムのみを対象とする。
      */
     private function validateRows(array $data): void
     {
-        foreach (['sender_profiles', 'customers', 'customer_signatures', 'quotes'] as $table) {
+        $requiredColumns = [
+            'sender_profiles' => ['sender_company'],
+            'customers' => ['customer_name'],
+            'customer_signatures' => ['customer_id', 'signature'],
+            'quotes' => [],
+        ];
+
+        foreach ($requiredColumns as $table => $columns) {
             if (! array_key_exists($table, $data)) {
                 continue;
             }
@@ -68,10 +87,12 @@ class BackupRestorer
                     ]);
                 }
 
-                if ($table === 'customer_signatures' && ! array_key_exists('customer_id', $row)) {
-                    throw ValidationException::withMessages([
-                        'file' => ["{$table}.{$index} に customer_id が必要です。"],
-                    ]);
+                foreach ($columns as $column) {
+                    if (! isset($row[$column]) || $row[$column] === '') {
+                        throw ValidationException::withMessages([
+                            'file' => ["{$table}.{$index} に {$column} が必要です。"],
+                        ]);
+                    }
                 }
             }
         }
@@ -90,10 +111,10 @@ class BackupRestorer
                 continue;
             }
 
-            $signature = $customer['customer_signature'];
+            $signature = self::normalizeSignature($customer['customer_signature']);
             unset($customer['customer_signature']);
 
-            if ($signature !== null && $signature !== '') {
+            if ($signature !== '') {
                 $signatures[] = [
                     'customer_id' => $customer['id'],
                     'signature' => $signature,
@@ -108,6 +129,12 @@ class BackupRestorer
         $data['customer_signatures'] = $signatures;
 
         return $data;
+    }
+
+    /** 取引先識別子の正規化（CustomerController の登録時と同じ規約）。 */
+    public static function normalizeSignature(mixed $signature): string
+    {
+        return is_scalar($signature) ? strtoupper(trim((string) $signature)) : '';
     }
 
     /**
