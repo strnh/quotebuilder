@@ -14,7 +14,8 @@ const TABS: { value: TabValue; label: string }[] = [{ value: 'all', label: 'す�
 
 function monthLabel(ym: string): string {
   const m = ym.match(/^(\d{4})-(\d{2})$/);
-  return m ? `${m[1]}年${Number(m[2])}月` : ym;
+  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) return ym;
+  return `${m[1]}年${Number(m[2])}月`;
 }
 
 export default function QuoteList() {

@@ -24,13 +24,22 @@ test.describe('見積書', () => {
 
   test('年月で絞り込める', async ({ page }) => {
     const year = new Date().getFullYear();
+    // シードは全件 6 月作成のため、5 月の見積を 1 件追加して月で件数が変わることを検証する
+    await page.evaluate((y) => {
+      const rows = JSON.parse(localStorage.getItem('quotes:quotes'));
+      rows.push({ ...rows[0], id: 'id_e2e_may', quote_number: `Q-${y}05-001`, created_date: `${y}-05-10` });
+      localStorage.setItem('quotes:quotes', JSON.stringify(rows));
+    }, year);
+    await page.reload();
+    await expect(page.locator('tbody tr')).toHaveCount(4);
+
     const monthSelect = page.getByLabel('年月で絞り込み');
-    // シードは全件 6 月作成
     await monthSelect.selectOption(`${year}-06`);
     await expect(page.locator('tbody tr')).toHaveCount(3);
-    // 選択肢に無い月は選べないため、解除して全件へ戻ることを確認
+    await monthSelect.selectOption(`${year}-05`);
+    await expect(page.locator('tbody tr')).toHaveCount(1);
     await monthSelect.selectOption('');
-    await expect(page.locator('tbody tr')).toHaveCount(3);
+    await expect(page.locator('tbody tr')).toHaveCount(4);
   });
 
   test('取引先で絞り込める', async ({ page }) => {
