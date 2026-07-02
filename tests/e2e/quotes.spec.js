@@ -46,7 +46,7 @@ test.describe('見積書', () => {
     const customerSelect = page.getByLabel('取引先で絞り込み');
     await customerSelect.selectOption({ label: 'ベータ工業株式会社' });
     await expect(page.locator('tbody tr')).toHaveCount(1);
-    await expect(page.getByText('事務用品定期納入')).toBeVisible();
+    await expect(page.locator('tbody').getByText('事務用品定期納入')).toBeVisible();
     await customerSelect.selectOption('');
     await expect(page.locator('tbody tr')).toHaveCount(3);
   });
@@ -59,7 +59,7 @@ test.describe('見積書', () => {
     // さらにステータスタブで絞る
     await page.getByRole('button', { name: /^受注/ }).click();
     await expect(page.locator('tbody tr')).toHaveCount(1);
-    await expect(page.getByText('Webシステム開発一式')).toBeVisible();
+    await expect(page.locator('tbody').getByText('Webシステム開発一式')).toBeVisible();
     // さらに検索でヒットしない語を入れると 0 件（フィルタ起因の空状態メッセージ）
     await page.getByPlaceholder('顧客名・見積番号で検索...').fill('存在しない語');
     await expect(page.locator('tbody tr')).toHaveCount(0);
