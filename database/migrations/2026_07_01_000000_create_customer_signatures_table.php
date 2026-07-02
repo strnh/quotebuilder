@@ -12,6 +12,22 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // 正規化（大文字化）でケース違いの識別子が衝突すると UNIQUE 制約で移行が停止するため、
+        // テーブル作成より前に検出し、原因が分かるメッセージで失敗させる（失敗時に残骸を残さない）。
+        $duplicates = DB::table('customers')
+            ->selectRaw('upper(trim(customer_signature)) as sig, count(*) as n')
+            ->whereNotNull('customer_signature')
+            ->where('customer_signature', '!=', '')
+            ->groupBy('sig')
+            ->having('n', '>', 1)
+            ->pluck('sig');
+
+        if ($duplicates->isNotEmpty()) {
+            throw new RuntimeException(
+                '大文字化すると重複する取引先識別子があるため移行できません。事前に解消してください: '.$duplicates->implode(', ')
+            );
+        }
+
         Schema::create('customer_signatures', function (Blueprint $table) {
             $table->id();
             $table->foreignId('customer_id')->constrained()->cascadeOnDelete();
@@ -61,8 +77,9 @@ return new class extends Migration
         });
 
         Schema::table('customers', function (Blueprint $table) {
-            // 複数識別子から単一値へ戻せない顧客や、識別子未登録の顧客もロールバック可能にする。
-            $table->string('customer_signature')->nullable()->unique()->change();
+            // 列は nullable のまま UNIQUE インデックスのみ付与する（change() は列定義変更となり
+            // 環境により doctrine/dbal 依存になるため使わない）。識別子未登録顧客の NULL も許容される。
+            $table->unique('customer_signature');
         });
 
         Schema::dropIfExists('customer_signatures');

@@ -222,6 +222,16 @@ class BackupTest extends TestCase
             ->assertJsonValidationErrors('file');
     }
 
+    public function test_restore_rejects_non_scalar_required_column(): void
+    {
+        // 配列などの非スカラ値も DB エラー(500)ではなく 422 で拒否する。
+        $payload = json_encode(['version' => 2, 'customers' => [['id' => 1, 'customer_name' => ['不正']]]]);
+
+        $this->postRestore($payload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('file');
+    }
+
     public function test_restore_normalizes_signature_to_uppercase(): void
     {
         $payload = $this->makeBackup(

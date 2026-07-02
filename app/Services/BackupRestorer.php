@@ -87,10 +87,17 @@ class BackupRestorer
                     ]);
                 }
 
+                if ($row['id'] !== null && ! is_scalar($row['id'])) {
+                    throw ValidationException::withMessages([
+                        'file' => ["{$table}.{$index} の id が不正です。"],
+                    ]);
+                }
+
                 foreach ($columns as $column) {
-                    if (! isset($row[$column]) || $row[$column] === '') {
+                    // 配列などの非スカラ値は DB 例外（500）になる前に 422 で拒否する。
+                    if (! is_scalar($row[$column] ?? null) || $row[$column] === '') {
                         throw ValidationException::withMessages([
-                            'file' => ["{$table}.{$index} に {$column} が必要です。"],
+                            'file' => ["{$table}.{$index} に {$column}（スカラ値）が必要です。"],
                         ]);
                     }
                 }
@@ -144,13 +151,22 @@ class BackupRestorer
     {
         $restoredIds = [];
 
+        // 行ごとの exists() で 2N クエリにならないよう、対象IDの存在判定を先にまとめて取得する。
+        $ids = array_values(array_filter(array_column($rows, 'id'), fn ($id) => $id !== null));
+        $existingIds = [];
+        foreach (array_chunk($ids, 500) as $chunk) {
+            foreach (DB::table($table)->whereIn('id', $chunk)->pluck('id') as $existingId) {
+                $existingIds[(string) $existingId] = true;
+            }
+        }
+
         foreach ($rows as $row) {
             if ($prepare !== null) {
                 $row = $prepare($row);
             }
 
             $id = $row['id'] ?? null;
-            $exists = $id !== null && DB::table($table)->where('id', $id)->exists();
+            $exists = $id !== null && isset($existingIds[(string) $id]);
 
             if ($exists && $mode === 'skip') {
                 $summary['skipped']++;
@@ -169,6 +185,8 @@ class BackupRestorer
 
                 if ($id !== null) {
                     $restoredIds[] = $id;
+                    // 同じファイル内に同一IDが再出現した場合も既存扱いにする。
+                    $existingIds[(string) $id] = true;
                 }
             } catch (QueryException $e) {
                 $message = strtolower($e->getMessage());
