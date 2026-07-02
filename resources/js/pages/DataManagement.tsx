@@ -3,7 +3,7 @@ import { Download, Upload, Database } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button, Card, Field, Modal, useToast } from '../components/ui';
 import PageHeader from '../components/PageHeader';
-import { downloadBackup, restoreBackup } from '../data/adapters/api';
+import { downloadBackup, restoreBackup, type ApiError } from '../data/adapters/api';
 import type { RestoreResult } from '../types';
 
 type RestoreMode = 'skip' | 'overwrite';
@@ -64,7 +64,9 @@ export default function DataManagement() {
         toast(`リストア完了（${summary.errors.length}件エラーあり）`, 'info');
       }
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'リストアに失敗しました', 'error');
+      // 422 は message が汎用文言になりやすいため、errors の先頭（例: errors.file[0]）を優先して表示する。
+      const detail = (err as ApiError).errors ? Object.values((err as ApiError).errors!)[0]?.[0] : undefined;
+      toast(detail || (err instanceof Error ? err.message : 'リストアに失敗しました'), 'error');
     } finally {
       setRestoring(false);
       setSelectedFile(null);

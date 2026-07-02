@@ -30,4 +30,23 @@ class CustomerApiTest extends TestCase
         ])->assertStatus(422)
             ->assertJsonValidationErrors('signatures');
     }
+
+    public function test_store_rejects_non_string_signature_element(): void
+    {
+        // 配列要素を (string) キャストせず、string ルールで 422 にする（"Array" 化のすり抜け防止）。
+        $this->postJson('/api/customers', [
+            'customer_name' => 'テスト商事',
+            'signatures' => [[]],
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors('signatures.0');
+    }
+
+    public function test_store_trims_signatures(): void
+    {
+        $this->postJson('/api/customers', [
+            'customer_name' => 'テスト商事',
+            'signatures' => [' abc '],
+        ])->assertCreated()
+            ->assertJsonPath('signatures', ['ABC']);
+    }
 }

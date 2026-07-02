@@ -74,11 +74,12 @@ class CustomerController extends Controller
     private function validated(Request $request): array
     {
         // 取込突合のため signature は大文字へ正規化・重複除去。unique 判定を正規化後の値で行うため validate より前に merge する。
-        // 配列以外の入力は正規化せずそのまま validate へ渡し、array ルールで 422 にする。
+        // 「配列かつ全要素が文字列」の場合のみ正規化し、それ以外は validate の array / string ルールで 422 にする
+        // （非文字列要素を (string) キャストすると "Array" 等になり型チェックをすり抜けるため）。
         $signatures = $request->input('signatures', []);
-        if (is_array($signatures)) {
+        if (is_array($signatures) && ! array_filter($signatures, fn ($s) => ! is_string($s))) {
             $signatures = array_values(array_unique(array_map(
-                fn ($s) => strtoupper((string) $s),
+                fn (string $s) => strtoupper(trim($s)),
                 $signatures
             )));
             $request->merge(['signatures' => $signatures]);
