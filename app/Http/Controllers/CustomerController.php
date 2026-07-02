@@ -74,11 +74,15 @@ class CustomerController extends Controller
     private function validated(Request $request): array
     {
         // 取込突合のため signature は大文字へ正規化・重複除去。unique 判定を正規化後の値で行うため validate より前に merge する。
-        $signatures = array_values(array_unique(array_map(
-            fn ($s) => strtoupper((string) $s),
-            (array) $request->input('signatures', [])
-        )));
-        $request->merge(['signatures' => $signatures]);
+        // 配列以外の入力は正規化せずそのまま validate へ渡し、array ルールで 422 にする。
+        $signatures = $request->input('signatures', []);
+        if (is_array($signatures)) {
+            $signatures = array_values(array_unique(array_map(
+                fn ($s) => strtoupper((string) $s),
+                $signatures
+            )));
+            $request->merge(['signatures' => $signatures]);
+        }
 
         return $request->validate([
             'customer_name' => ['required', 'string', 'max:255'],
