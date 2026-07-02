@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('見積書', () => {
   test('一覧にシードされた見積書が表示される', async ({ page }) => {
     await expect(page.locator('tbody tr')).toHaveCount(3);
-    await expect(page.getByText('株式会社アルファ商事').first()).toBeVisible();
+    await expect(page.locator('tbody').getByText('株式会社アルファ商事').first()).toBeVisible();
   });
 
   test('ステータスタブで絞り込める', async ({ page }) => {
@@ -19,7 +19,51 @@ test.describe('見積書', () => {
   test('検索で絞り込める', async ({ page }) => {
     await page.getByPlaceholder('顧客名・見積番号で検索...').fill('ベータ');
     await expect(page.locator('tbody tr')).toHaveCount(1);
-    await expect(page.getByText('ベータ工業株式会社')).toBeVisible();
+    await expect(page.locator('tbody').getByText('ベータ工業株式会社')).toBeVisible();
+  });
+
+  test('年月で絞り込める', async ({ page }) => {
+    const year = new Date().getFullYear();
+    // シードは全件 6 月作成のため、5 月の見積を 1 件追加して月で件数が変わることを検証する
+    await page.evaluate((y) => {
+      const rows = JSON.parse(localStorage.getItem('quotes:quotes'));
+      rows.push({ ...rows[0], id: 'id_e2e_may', quote_number: `Q-${y}05-001`, created_date: `${y}-05-10` });
+      localStorage.setItem('quotes:quotes', JSON.stringify(rows));
+    }, year);
+    await page.reload();
+    await expect(page.locator('tbody tr')).toHaveCount(4);
+
+    const monthSelect = page.getByLabel('年月で絞り込み');
+    await monthSelect.selectOption(`${year}-06`);
+    await expect(page.locator('tbody tr')).toHaveCount(3);
+    await monthSelect.selectOption(`${year}-05`);
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    await monthSelect.selectOption('');
+    await expect(page.locator('tbody tr')).toHaveCount(4);
+  });
+
+  test('取引先で絞り込める', async ({ page }) => {
+    const customerSelect = page.getByLabel('取引先で絞り込み');
+    await customerSelect.selectOption({ label: 'ベータ工業株式会社' });
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    await expect(page.locator('tbody').getByText('事務用品定期納入')).toBeVisible();
+    await customerSelect.selectOption('');
+    await expect(page.locator('tbody tr')).toHaveCount(3);
+  });
+
+  test('タブ・検索・年月・取引先を併用して絞り込める（AND条件）', async ({ page }) => {
+    const year = new Date().getFullYear();
+    await page.getByLabel('年月で絞り込み').selectOption(`${year}-06`);
+    await page.getByLabel('取引先で絞り込み').selectOption({ label: '株式会社アルファ商事' });
+    await expect(page.locator('tbody tr')).toHaveCount(2);
+    // さらにステータスタブで絞る
+    await page.getByRole('button', { name: /^受注/ }).click();
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    await expect(page.locator('tbody').getByText('Webシステム開発一式')).toBeVisible();
+    // さらに検索でヒットしない語を入れると 0 件（フィルタ起因の空状態メッセージ）
+    await page.getByPlaceholder('顧客名・見積番号で検索...').fill('存在しない語');
+    await expect(page.locator('tbody tr')).toHaveCount(0);
+    await expect(page.getByText('条件に一致する見積書がありません')).toBeVisible();
   });
 
   test('行クリックでプレビュー（見積書レイアウト）が開く', async ({ page }) => {
